@@ -1,1 +1,0 @@
-com.tencent.mm 40 1
