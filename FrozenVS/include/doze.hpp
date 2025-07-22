@@ -296,7 +296,8 @@ public:
 		if (settings.enableDoze) {
 			if (settings.enableDebug)
 				frozen.log("开始准备深度Doze");
-			updateDozeWhitelist();
+			if (settings.enableClearBatteryList) updateDozeWhitelist();
+				
 			updateUidTime();
 
 			frozen.log("😴 进入深度Doze");

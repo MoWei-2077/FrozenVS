@@ -17,7 +17,6 @@ private:
 	size_t position = 0;
 
 	string propPath;
-	string changelog{ "无" };
 
 	map<string, string> prop{
 			{"id",          "Unknown"},
@@ -88,6 +87,8 @@ private:
 	}
 
 public:
+    bool isSamsung{ false };
+    bool isOppoVivo{ false };
 
 	int ANDROID_VER = 0;
 	int SDK_INT_VER = 0;
@@ -131,13 +132,6 @@ public:
 		if (versionCode > 0)
 			moduleEnv += " (" + to_string(versionCode) + ")";
 
-		auto fp = fopen((modulePath + "/boot.log").c_str(), "rb");
-		if (fp) {
-			auto len = fread(logCache, 1, BUFF_SIZE, fp);
-			if (len > 0)
-				position = len;
-			fclose(fp);
-		}
 
 		toFileFlag = argc > 1;
 		if (toFileFlag) {
@@ -147,7 +141,7 @@ public:
 		}
 
 		propPath = modulePath + "/module.prop";
-		fp = fopen(propPath.c_str(), "r");
+		auto fp = fopen(propPath.c_str(), "r");
 		if (!fp) {
 			fprintf(stderr, "找不到模块属性文件 [%s]", propPath.c_str());
 			exit(-1);
@@ -172,7 +166,6 @@ public:
 		}
 		fclose(fp);
 
-		changelog = Utils::readString((modulePath + "/changelog.txt").c_str());
 
 		logFmt("模块版本 %s", prop["version"].c_str());
 		logFmt("编译时间 %s %s UTC+8", compilerDate, __TIME__);
@@ -190,30 +183,31 @@ public:
 			kernelVerStr =
 				to_string(kernelVersion.main) + "." + to_string(kernelVersion.sub) + "." +
 				to_string(kernelVersion.patch);
+			logFmt("内核版本 %d.%d.%d", kernelVersion.main, kernelVersion.sub, kernelVersion.patch);
 		}
-	}
 
-	char* getChangelogPtr() { return (char*)changelog.c_str(); }
+		char res[256];
+		if (__system_property_get("gsm.operator.alpha", res) > 0 && res[0] != ',')
+			logFmt("运营信息 %s", res);
+		if (__system_property_get("gsm.network.type", res) > 0) logFmt("网络类型 %s", res);
+		if (__system_property_get("ro.product.brand", res) > 0) {
+			logFmt("设备厂商 %s", res);
 
-	size_t getChangelogLen() { return changelog.length(); }
-
-	bool saveProp() {
-		auto fp = fopen(propPath.c_str(), "wb");
-		if (!fp)
-			return false;
-
-		char tmp[1024];
-		size_t len = snprintf(tmp, sizeof(tmp),
-			"id=%s\nname=%s\nversion=%s\nversionCode=%s\nauthor=%s\ndescription=%s\nupdateJson=%s\n",
-			prop["id"].c_str(), prop["name"].c_str(), prop["version"].c_str(),
-			prop["versionCode"].c_str(),
-			prop["author"].c_str(), prop["description"].c_str(),
-			prop["updateJson"].c_str());
-
-		size_t writeLen = fwrite(tmp, 1, len, fp);
-		fclose(fp);
-
-		return (writeLen == len);
+			for (int i = 0; i < 8; i++)res[i] |= 32;
+			//*((uint64_t*)res) |= 0x20202020'20202020ULL;
+			if (!strncmp(res, "samsung", 7))
+				isSamsung = true;
+			else if (!strncmp(res, "oppo", 4) || !strncmp(res, "vivo", 4) ||
+                !strncmp(res, "realme", 6) || !strncmp(res, "iqoo", 4))
+                isOppoVivo = true;
+		}
+		if (__system_property_get("ro.product.marketname", res) > 0) logFmt("设备型号 %s", res);
+		if (__system_property_get("persist.sys.device_name", res) > 0) logFmt("设备名称 %s", res);
+		if (__system_property_get("ro.system.build.version.incremental", res) > 0)
+			logFmt("系统版本 %s", res);
+		if (__system_property_get("ro.soc.manufacturer", res) > 0 &&
+			__system_property_get("ro.soc.model", res + 100) > 0)
+			logFmt("硬件平台 %s %s", res, res + 100);
 	}
 
 	void setWorkMode(const string& mode) {

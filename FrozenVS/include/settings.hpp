@@ -13,11 +13,10 @@ private:
 	const static size_t SETTINGS_SIZE = 256;
 	uint8_t settingsVar[SETTINGS_SIZE] = {
 			6,  //[0] 设置文件版本
-			0,  //[1] 绑定到 CPU核心簇
 			10, //[2] freezeTimeout sec
 			20, //[3] wakeupTimeoutMin min
 			20, //[4] terminateTimeout sec
-			5,  //[5] setMode
+			4,  //[5] setMode
 			2,  //[6] refreezeTimeout
 			0,  //[7]
 			0,  //[8]
@@ -27,29 +26,28 @@ private:
 			0,  //[12]
 			1,  //[13] 电池监控
 			0,  //[14] 电流校准
-			0,  //[15] QQ/TIM冻结断网
-			1,  //[16] 调整 lmk 参数 仅安卓11-15
+			0,  //[15] 双电芯
+			1,  //[16] 调整 lmk 参数 仅安卓10-16
 			1,  //[17] 深度Doze
 			0,  //[18] 扩展前台
-			1,  //[19]
-			0,  //[20]
-			0,  //[21]
-			0,  //[22]
-			0,  //[13]
-			0,  //[24]
-			0,  //[25]
+			1,  //[19] 内存回收
+			0,  //[20] Binder冻结
+			0,  //[21] 全局断网
+			0,  //[22] 清理电池优化白名单
+			0,  //[23] ReKernel临时解冻
+			0,  //[24] 极简模式
+			0,  //[25] 
 			0,  //[26]
 			0,  //[27]
 			0,  //[28]
 			0,  //[29]
-			0,  //[30] Doze调试日志
+			0,  //[30] 详细日志
 			0,  //[31]
 			0,  //[32]
 	};
 
 public:
 	uint8_t& settingsVer = settingsVar[0];       // 设置文件版本
-	uint8_t& clusterBind = settingsVar[1];       // 绑定到 CPU簇 0-6
 	uint8_t& freezeTimeout = settingsVar[2];     // 单位 秒
 	uint8_t& wakeupTimeoutMin = settingsVar[3];  // 单位 分
 	uint8_t& terminateTimeout = settingsVar[4];  // 单位 秒
@@ -58,11 +56,17 @@ public:
 
 	uint8_t& enableBatteryMonitor = settingsVar[13];   // 电池监控
 	uint8_t& enableCurrentFix = settingsVar[14];       // 电池电流校准
-	//uint8_t& enableBreakNetwork = settingsVar[15];     // QQ/TIM冻结断网
-	uint8_t& enableLMK = settingsVar[16];              // 调整 lmk 参数 仅安卓11-15
+	uint8_t& enableDoubleCell = settingsVar[15];     // 双电芯
+	uint8_t& enableLMK = settingsVar[16];              // 调整 lmk 参数 仅安卓10-16
 	uint8_t& enableDoze = settingsVar[17];             // 深度Doze
-
-	uint8_t& enableDebug = settingsVar[30];        // Doze调试日志
+	uint8_t& enableWindows = settingsVar[18];          // 扩展前台
+	uint8_t& enableMemoryRecycle = settingsVar[19];   // 内存回收
+    uint8_t& enableBinderFreeze = settingsVar[20];     // Binder冻结
+    uint8_t& enableBreakNetwork = settingsVar[21];   // 全局断网
+    uint8_t& enableClearBatteryList = settingsVar[22]; // 清理电池优化白名单
+	uint8_t& enableReKernel = settingsVar[23]; // ReKernel临时解冻
+    uint8_t& enableEzMode = settingsVar[24]; // 极简模式
+	uint8_t& enableDebug = settingsVar[30];        // 详细日志
 
 	Settings& operator=(Settings&&) = delete;
 
@@ -91,40 +95,38 @@ public:
 				memcpy(settingsVar, tmp, SETTINGS_SIZE);
 
 				bool isError = false;
-				if (clusterBind > 6) {
-					frozen.logFmt("核心绑定参数[%d]错误, 已重置为 [0] [1] [2] [3]",
-						static_cast<int>(clusterBind));
-					clusterBind = 0;
-					isError = true;
-				}
-				if (setMode > 5) {
-					frozen.logFmt("冻结模式参数[%d]错误, 已重设为 全局SIGSTOP", static_cast<int>(setMode));
+				if (setMode > 4) {
+					frozen.logFmt("冻结模式参数[%d]错误, 已重设为 全局SIGSTOP", (int)setMode);
 					setMode = 0;
 					isError = true;
 				}
 				if (refreezeTimeoutIdx > 4) {
-					frozen.logFmt("定时压制参数[%d]错误, 已重设为 30分钟", static_cast<int>(refreezeTimeoutIdx));
+					frozen.logFmt("定时压制参数[%d]错误, 已重设为 30分钟", (int)refreezeTimeoutIdx);
 					refreezeTimeoutIdx = 2;
 					isError = true;
 				}
 				if (freezeTimeout < 1 || freezeTimeout > 60) {
-					frozen.logFmt("超时冻结参数[%d]错误, 已重置为10秒", static_cast<int>(freezeTimeout));
+					frozen.logFmt("超时冻结参数[%d]错误, 已重置为10秒", (int)freezeTimeout);
 					freezeTimeout = 10;
 					isError = true;
 				}
 				if (wakeupTimeoutMin < 3 || wakeupTimeoutMin > 120) {
-					frozen.logFmt("定时解冻参数[%d]错误, 已重置为30分", static_cast<int>(wakeupTimeoutMin));
+					frozen.logFmt("定时解冻参数[%d]错误, 已重置为30分", (int)wakeupTimeoutMin);
 					wakeupTimeoutMin = 30;
 					isError = true;
 				}
 				if (terminateTimeout < 3 || terminateTimeout > 120) {
-					frozen.logFmt("超时杀死参数[%d]错误, 已重置为30秒", static_cast<int>(terminateTimeout));
+					frozen.logFmt("超时杀死参数[%d]错误, 已重置为30秒", (int)terminateTimeout);
 					terminateTimeout = 30;
 					isError = true;
 				}
 				if (isError)
 					frozen.log(save() ? "⚙️设置成功" : "🔧设置文件写入失败");
 			}
+			if (frozen.isOppoVivo) {
+                frozen.log("开启扩展识别 OPPO/VIVO/IQOO/REALME");
+                enableWindows = true;
+            }
 		}
 		else {
 			frozen.log("设置文件不存在, 将初始化设置文件");
@@ -142,26 +144,6 @@ public:
 
 	size_t size() {
 		return SETTINGS_SIZE;
-	}
-
-	string getClusterText() const {
-		switch (clusterBind) {
-		case 0:
-		default:
-			return "[0] [1] [2] [3]";
-		case 1:
-			return "[0] [1] [2]";
-		case 2:
-			return "[3] [4]";
-		case 3:
-			return "[4] [5] [6]";
-		case 4:
-			return "[5] [6]";
-		case 5:
-			return "[7]";
-		case 6:
-			return "[4] [5] [6] [7]";
-		}
 	}
 
 	int getRefreezeTimeout() {
@@ -187,12 +169,6 @@ public:
 		const size_t REPLY_BUF_SIZE = 2048;
 
 		switch (idx) {
-		case 1: { //[1] 绑定到 CPU核心
-			if (6 < val) // 0~6 核心簇
-				return snprintf(replyBuf, REPLY_BUF_SIZE, "核心错误, 正常范围:0~6, 欲设为:%d", val);
-		}
-			  break;
-
 		case 2: { //[2] freezeTimeout sec
 			if (val < 1 || 60 < val)
 				return snprintf(replyBuf, REPLY_BUF_SIZE, "超时冻结参数错误, 正常范围:1~60, 欲设为:%d", val);
@@ -228,16 +204,16 @@ public:
 		case 12: // xxx
 		case 13: // 电池监控
 		case 14: // 电流校准
-		case 15: // QQ/TIM冻结断网
+		case 15: // 双电芯
 		case 16: // lmk
 		case 17: // doze
 		case 18: // 扩展前台
-		case 19: //
-		case 20: //
-		case 21: //
-		case 22: //
-		case 23: //
-		case 24: //
+		case 19: // 内存回收
+		case 20: // Binder冻结
+		case 21: // 全局断网
+		case 22: // 清理电池优化白名单
+		case 23: // ReKernel临时解冻
+		case 24: // 极简模式
 		case 25: //
 		case 26: //
 		case 27: //

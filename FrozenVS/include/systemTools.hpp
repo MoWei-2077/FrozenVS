@@ -11,33 +11,21 @@ private:
 
 	thread sndThread;
 
-	constexpr static uint32_t CPU0S = 0XFF22BB44; // efficiency
-	constexpr static uint32_t CPU1S = 0XFF22BB22;
-	constexpr static uint32_t CPU2S = 0XFF44BB22;
-	constexpr static uint32_t CPU3S = 0XFF66BB22;
-	constexpr static uint32_t CPU4S = 0XFF44BB22;
-	constexpr static uint32_t CPU5S = 0XFF66BB22;
 
-	constexpr static uint32_t CPU3M = 0XFFDD6622; // performance
-	constexpr static uint32_t CPU4M = 0XFFDD7722;
-	constexpr static uint32_t CPU5M = 0XFFDD8822;
-	constexpr static uint32_t CPU6M = 0XFFDD9922;
+    constexpr static uint32_t COLOR_E = 0XFF22BB44; // efficiency
+    constexpr static uint32_t COLOR_M = 0XFFDD6622; // performance
+    constexpr static uint32_t COLOR_P = 0XFF2266BB; // performance+
+    constexpr static uint32_t COLOR_PRIME = 0XFF2238EE; // Prime
 
-	constexpr static uint32_t CPU5P = 0XFF2266BB; // performance+
-	constexpr static uint32_t CPU6P = 0XFF2288BB;
 
-	constexpr static uint32_t CPU4B = 0XFF2238EE; // Prime
-	constexpr static uint32_t CPU5B = 0XFF2230EE;
-	constexpr static uint32_t CPU6B = 0XFF2228EE;
-	constexpr static uint32_t CPU7B = 0XFF2220EE;
-
-	constexpr static uint32_t COLOR_CLUSTER[5][8] = {
-			{CPU0S, CPU1S, CPU2S, CPU3S, CPU4B, CPU5B, CPU6B, CPU7B}, // 44
-			{CPU0S, CPU1S, CPU2S, CPU3S, CPU4M, CPU5M, CPU6M, CPU7B}, // 431
-			{CPU0S, CPU1S, CPU2S, CPU3S, CPU4M, CPU5M, CPU6B, CPU7B}, // 422
-			{CPU0S, CPU1S, CPU2S, CPU3M, CPU4M, CPU5P, CPU6P, CPU7B}, // 3221
-			{CPU0S, CPU1S, CPU2S, CPU3S, CPU4S, CPU5S, CPU6B, CPU7B}, // 62
-	};
+    constexpr static uint32_t COLOR_CLUSTER[6][8] = {
+            {COLOR_E, COLOR_E, COLOR_E, COLOR_E, COLOR_PRIME, COLOR_PRIME, COLOR_PRIME, COLOR_PRIME}, // 44
+            {COLOR_E, COLOR_E, COLOR_E, COLOR_E, COLOR_M, COLOR_M, COLOR_M, COLOR_PRIME}, // 431
+            {COLOR_E, COLOR_E, COLOR_E, COLOR_E, COLOR_M, COLOR_M, COLOR_PRIME, COLOR_PRIME}, // 422
+            {COLOR_E, COLOR_E, COLOR_E, COLOR_M, COLOR_M, COLOR_P, COLOR_P, COLOR_PRIME}, // 3221
+            {COLOR_E, COLOR_E, COLOR_E, COLOR_E, COLOR_E, COLOR_E, COLOR_PRIME, COLOR_PRIME}, // 62
+            {COLOR_E, COLOR_E, COLOR_M, COLOR_M, COLOR_M, COLOR_M, COLOR_M, COLOR_PRIME}, // 251
+    };
 
 public:
 	// 各核心 曲线颜色 ABGR
@@ -74,34 +62,26 @@ public:
 		frozen(frozen), settings(settings) {
 
 		getCpuTempPath();
-		bindCluster();
 
-		char res[256];
-		if (__system_property_get("gsm.operator.alpha", res) > 0 && res[0] != ',')
-			frozen.logFmt("运营信息 %s", res);
-		if (__system_property_get("gsm.network.type", res) > 0) frozen.logFmt("网络类型 %s", res);
-		if (__system_property_get("ro.product.brand", res) > 0) {
-			frozen.logFmt("设备厂商 %s", res);
-
-			for (int i = 0; i < 8; i++)res[i] |= 32;
-			//*((uint64_t*)res) |= 0x20202020'20202020ULL;
-			if (!strncmp(res, "samsung", 7))
-				isSamsung = true;
-		}
-		if (__system_property_get("ro.product.marketname", res) > 0) frozen.logFmt("设备型号 %s", res);
-		if (__system_property_get("persist.sys.device_name", res) > 0) frozen.logFmt("设备名称 %s", res);
-		if (__system_property_get("ro.system.build.version.incremental", res) > 0)
-			frozen.logFmt("系统版本 %s", res);
-		if (__system_property_get("ro.soc.manufacturer", res) > 0 &&
-			__system_property_get("ro.soc.model", res + 100) > 0)
-			frozen.logFmt("硬件平台 %s %s", res, res + 100);
+		InitCPU();
 
 		InitLMK();
+		EZMode();
 
 		sndThread = thread(&SystemTools::sndThreadFunc, this);
 
 		frozen.extMemorySize = getExtMemorySize();
 	}
+
+
+    void EZMode() {
+        if (!settings.enableEzMode) return;
+        frozen.log("⚠您已启用EZ模式,您自定义的部分参数将被修改,此模式专为开箱即用的小白打造");
+        settings.enableClearBatteryList = 1;
+        settings.enableBreakNetwork = 1;
+        settings.freezeTimeout = 3;
+        settings.enableBinderFreeze = 0;    
+    }
 
 	size_t formatRealTime(int* ptr) {
 
@@ -143,7 +123,7 @@ public:
 	}
 
 	void InitLMK() {
-		if (!settings.enableLMK || frozen.SDK_INT_VER < 30 || frozen.SDK_INT_VER > 35)
+		if (!settings.enableLMK)
 			return;
 
 		// https://cs.android.com/android/platform/superproject/+/master:system/memory/lmkd/lmkd.cpp
@@ -154,14 +134,30 @@ public:
 		//  8192:0,12288:100,16384:200,32768:250,65536:900,96000:950
 		//  4096:0,5120:100,8192:200,32768:250,65536:900,96000:950
 		const char* lmkdParameter[] = {
-				"ro.lmk.low", "1001",
-				"ro.lmk.medium", "1001",
-				"ro.lmk.critical", "100",
-				"ro.lmk.use_minfree_levels", "true",
-				"ro.lmk.use_new_strategy", "true",
-				"ro.lmk.swap_free_low_percentage", "10",
-				"sys.lmk.minfree_levels",
-				"8192:0,12288:100,16384:200,32768:250,55296:900,80640:950",
+                "ro.lmk.low", "1001",
+                "ro.lmk.medium", "1001",
+                "ro.lmk.critical", "100",
+                "ro.lmk.super_critical", "1001",
+                "ro.lmk.reclaim_scan_threshold", "1024",
+                "ro.lmk.use_new_strategy", "true",
+                "ro.lmk.debug", "false",
+                "ro.config.low_ram", "false",
+                "ro.lmk.critical_upgrade", "false",
+                "ro.lmk.use_minfree_levels", "false",
+                "ro.lmk.kill_heaviest_task", "false",
+                "ro.lmk.kill_timeout_ms", "2147483647",
+                "ro.lmk.thrashing_limit", "100",
+                "ro.lmk.enable_adaptive_lmk", "false",
+                "ro.lmk.use_psi", "true",
+                "ro.lmk.thrashing_limit_decay", "10",
+                "ro.lmk.psi_partial_stall_ms", "800",
+                "ro.lmk.psi_complete_stall_ms", "1000",
+                "ro.lmk.downgrade_pressure", "100",
+                "persist.sys.lmk.reportkills", "false",
+                "ro.lmk.swap_free_low_percentage", "10",
+                "ro.lmk.direct_reclaim_pressure", "100",
+                "sys.lmk.minfree_levels",
+                "4096:1001,5120:1001,8192:1001,32768:1001,96000:1001,131072:1001",
 		};
 		// const char* adj = "0,100,200,250,900,950"; //另有 0,1,2,4,9,12
 		const char minfree[] = "8192,12288,16384,32768,55296,80640";
@@ -197,6 +193,19 @@ public:
 			else {
 				frozen.log("未找到 KSU resetprop");
 			}
+		}
+		else if (frozen.moduleEnv == "Apatch") {
+			if (!access("/data/adb/ap/bin/resetprop", F_OK)) {
+				string cmd;
+				for (int i = 0; i < len; i += 2)
+					cmd += string("/data/adb/ap/bin/resetprop") + lmkdParameter[i] + " " + lmkdParameter[i + 1] + ";";
+				cmd += "sleep 1;lmkd --reinit";
+				system(cmd.c_str());
+				frozen.log("更新参数 LMK");
+			}
+			else {
+				frozen.log("未找到 APatch resetprop");
+			}		
 		}
 	}
 
@@ -244,6 +253,10 @@ public:
 		else {
 			current /= 1000; // uA -> mA
 		}
+
+		if (settings.enableDoubleCell)//双电芯
+            current *= 2;
+
 		return (voltage * current) / (isSamsung ? 1000 : -1000);
 	}
 
@@ -317,118 +330,61 @@ public:
 	}
 
 
-	void bindCluster() {
+    void InitCPU() {
 
-		const auto res = getCpuCluster();
-		cpuCluster = 0;
-		for (const auto& [freq, num] : res)
-			cpuCluster = cpuCluster * 10 + num;
+        const auto res = getCpuCluster();
+        cpuCluster = 0;
+        for (const auto& [freq, num] : res)
+            cpuCluster = cpuCluster * 10 + num;
 
-		if (cpuCluster && res.size() < 10) {
-			stackString<128> str("核心频率");
-			for (const auto& [freq, cnt] : res)
-				str.appendFmt(" %.2fGHz*%d", freq / (freq > 1e8 ? 1e9 : 1e6), cnt);
-			frozen.log(*str);
-		}
+        if (cpuCluster && res.size() < 10) {
+            stackString<256> str("核心频率");
+            for (const auto& [freq, cnt] : res)
+                str.appendFmt(" %.2fGHz*%d", freq / (freq > 1e8 ? 1e9 : 1e6), cnt);
+            frozen.log(*str);
+        }
 
-		switch (cpuCluster) {
-		case 431:
-			COLOR_CPU = COLOR_CLUSTER[1];
-			break;
-		case 422:
-			COLOR_CPU = COLOR_CLUSTER[2];
-			break;
-		case 3221:
-			COLOR_CPU = COLOR_CLUSTER[3];
-			break;
-		case 62:
-			COLOR_CPU = COLOR_CLUSTER[4];
-			break;
-		}
+        switch (cpuCluster) {
+        case 431:
+            COLOR_CPU = COLOR_CLUSTER[1];
+            break;
+        case 422:
+            COLOR_CPU = COLOR_CLUSTER[2];
+            break;
+        case 3221:
+            COLOR_CPU = COLOR_CLUSTER[3];
+            break;
+        case 62:
+            COLOR_CPU = COLOR_CLUSTER[4];
+            break;
+        case 251:
+            COLOR_CPU = COLOR_CLUSTER[5];
+            break;
+        }
 
-		cpuCoreAll = sysconf(_SC_NPROCESSORS_CONF);
-		cpuCoreValid = sysconf(_SC_NPROCESSORS_ONLN);
-		frozen.logFmt("全部核心 %d 可用核心 %d", cpuCoreAll, cpuCoreValid);
-		if (cpuCoreAll != cpuCoreValid) {
-			stackString<128> tips("当前离线核心 ");
-			char tmp[64];
-			for (int i = 0; i < cpuCoreAll; i++) {
-				snprintf(tmp, sizeof(tmp), "/sys/devices/system/cpu/cpu%d/online", i);
-				auto fd = open(tmp, O_RDONLY);
-				if (fd < 0)continue;
-				read(fd, tmp, 1);
-				close(fd);
-				if (tmp[0] == '0')
-					tips.append("[", 1).append(i).append("]", 1);
-			}
-			frozen.log(tips.c_str());
-		}
-		if (cpuCoreValid > 16) {
-			cpuCoreValid = 16;
-			frozen.log("核心数量超过16, 部分功能可能不受支持");
-		}
+        cpuCoreAll = sysconf(_SC_NPROCESSORS_CONF);
+        cpuCoreValid = sysconf(_SC_NPROCESSORS_ONLN);
+        frozen.logFmt("全部核心 %d 可用核心 %d", cpuCoreAll, cpuCoreValid);
+        if (cpuCoreAll != cpuCoreValid) {
+            stackString<128> tips("当前离线核心 ");
+            char tmp[64];
+            for (int i = 0; i < cpuCoreAll; i++) {
+                snprintf(tmp, sizeof(tmp), "/sys/devices/system/cpu/cpu%d/online", i);
+                auto fd = open(tmp, O_RDONLY);
+                if (fd < 0)continue;
+                read(fd, tmp, 1);
+                close(fd);
+                if (tmp[0] == '0')
+                    tips.append("[", 1).append(i).append("]", 1);
+            }
+            frozen.log(tips.c_str());
+        }
+        if (cpuCoreValid > 16) {
+            cpuCoreValid = 16;
+            frozen.log("核心数量超过16, 部分功能可能不受支持");
+        }
+    }
 
-		cpu_set_t mask;
-		CPU_ZERO(&mask);
-
-		switch (settings.clusterBind) {
-		case 0:
-		default:
-			CPU_SET(0, &mask);
-			CPU_SET(1, &mask);
-			CPU_SET(2, &mask);
-			CPU_SET(3, &mask);
-			break;
-		case 1:
-			CPU_SET(0, &mask);
-			CPU_SET(1, &mask);
-			CPU_SET(2, &mask);
-			break;
-		case 2:
-			CPU_SET(3, &mask);
-			CPU_SET(4, &mask);
-			break;
-		case 3:
-			CPU_SET(4, &mask);
-			CPU_SET(5, &mask);
-			CPU_SET(6, &mask);
-			break;
-		case 4:
-			CPU_SET(5, &mask);
-			CPU_SET(6, &mask);
-			break;
-		case 5:
-			CPU_SET(7, &mask);
-			break;
-		case 6:
-			CPU_SET(4, &mask);
-			CPU_SET(5, &mask);
-			CPU_SET(6, &mask);
-			CPU_SET(7, &mask);
-			break;
-		}
-
-		stackString<128> tmp("绑定核心 ");
-		tmp.append(settings.getClusterText().c_str());
-		if (sched_setaffinity(0, sizeof(mask), &mask))
-			tmp.append(" 失败:").append(strerror(errno));
-
-		frozen.log(tmp.c_str());
-		usleep(1000);
-
-		CPU_ZERO(&mask);
-		if (sched_getaffinity(0, sizeof(mask), &mask) == 0) {
-			stackString<128> tips("所在核心");
-			for (int i = 0; i < cpuCoreAll; i++) {
-				if (CPU_ISSET(i, &mask))
-					tips.append(" [", 2).append(i).append("]", 1);
-			}
-			frozen.log(tips.c_str());
-		}
-		else {
-			frozen.logFmt("获取当前所在核心失败, ERROR [%d]:[%s]", errno, strerror(errno));
-		}
-	}
 
 	uint32_t drawChart(uint32_t* imgBuf, uint32_t height, uint32_t width) {
 		START_TIME_COUNT;
@@ -660,7 +616,7 @@ public:
 			sizeof(buff));
 
 		if (recvLen == 0) {
-			frozen.logFmt("%s() 工作异常, 请确认LSPosed中冻它勾选系统框架, 然后重启", __FUNCTION__);
+			frozen.logFmt("%s() 工作异常, 请确认LSPosed中Frozen勾选系统框架, 然后重启", __FUNCTION__);
 			END_TIME_COUNT;
 			return 0;
 		}
@@ -698,7 +654,7 @@ public:
 		//     "IN_MOVE_SELF"
 		// };
 
-		sleep(4);
+		sleep(2);
 
 		char buf[SND_BUF_SIZE];
 

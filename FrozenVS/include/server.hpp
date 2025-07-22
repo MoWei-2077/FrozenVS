@@ -22,26 +22,7 @@ private:
 	static const int REPLY_BUF_SIZE = 8 * 1024 * 1024; // 8 MiB TCP通信回应缓存大小
 	unique_ptr<char[]> recvBuf, replyBuf;
 
-	enum cmdEnum {
-		// 获取信息 无附加数据 No additional data required
-		getPropInfo = 2,     // return string: "ID\nName\nVersion\nVersionCode\nAuthor\nclusterNum"
-		getChangelog = 3,    // return string: "changelog"
-		getLog = 4,          // return string: "log"
-		getAppCfg = 5,       // return string: "package x\npackage x\n...
-		getRealTimeInfo = 6, // return ImgBytes[h*w*4]+String: (rawBitmap + 内存 频率 使用率 电流)
-		getSettings = 8,     // return bytes[256]: all settings parameter
-		getUidTime = 9,      // return "uid last_user_time last_sys_time user_time sys_time\n..."
 
-		// 设置 需附加数据
-		setAppCfg = 21,      // send "package x\npackage x\npackage x\n..."
-		setAppLabel = 22,    // send "uid label\nuid label\nuid label\n..."
-		setSettingsVar = 23, // send bytes[2]: [0]index [1]value
-
-		// 其他命令 无附加数据 No additional data required
-		clearLog = 61,       // return string: "log" //清理并返回log
-		getProcState = 62, // return string: "log" //打印冻结状态并返回log
-
-	};
 
 public:
 	Server& operator=(Server&&) = delete;
@@ -195,33 +176,28 @@ public:
 				}
 
 				recvBuf[recvLen] = 0;
-				handleCmd(appCommand, recvLen, clnt_sock);
+				handleCmd(static_cast<MANAGER_CMD>(appCommand), recvLen, clnt_sock);
 			}
 			close(serv_sock);
 		}
 	}
 
-	void handleCmd(const int appCommand, const int recvLen, const int clnt_sock) {
+	void handleCmd(const MANAGER_CMD appCommand, const int recvLen, const int clnt_sock) {
 		char* replyPtr;
 		uint32_t replyLen;
 		switch (appCommand) {
-		case cmdEnum::getPropInfo: {
+		case MANAGER_CMD::getPropInfo: {
 			replyPtr = replyBuf.get();
 			replyLen = frozen.formatProp(replyBuf.get(), REPLY_BUF_SIZE,
 				systemTools.cpuCluster);
 		} break;
 
-		case cmdEnum::getChangelog: {
-			replyPtr = frozen.getChangelogPtr();
-			replyLen = frozen.getChangelogLen();
-		} break;
-
-		case cmdEnum::getLog: {
+		case MANAGER_CMD::getLog: {
 			replyPtr = frozen.getLogPtr();
 			replyLen = frozen.getLoglen();
 		} break;
 
-		case cmdEnum::getAppCfg: {
+		case MANAGER_CMD::getAppCfg: {
 			uint32_t intLen = 0;
 			const auto ptr = reinterpret_cast<int*>(replyBuf.get());
 			for (const auto& [uid, info] : managedApp.getRaw()) {
@@ -234,7 +210,7 @@ public:
 			replyLen = intLen << 2; // intLen*sizeof(int)
 		} break;
 
-		case cmdEnum::getRealTimeInfo: {
+		case MANAGER_CMD::getRealTimeInfo: {
 			if (recvLen != 12) {
 				replyPtr = replyBuf.get();
 				replyLen = snprintf(replyBuf.get(), 128, "实时信息需要12字节, 实际收到[%u]",
@@ -262,7 +238,7 @@ public:
 			replyPtr = replyBuf.get();
 		} break;
 
-		case cmdEnum::getUidTime: {
+		case MANAGER_CMD::getUidTime: {
 			int intLen = 0;
 			int* ptr = reinterpret_cast<int*>(replyBuf.get());
 			struct st {
@@ -288,12 +264,25 @@ public:
 			replyLen = intLen << 2; // intLen*sizeof(int)
 		} break;
 
-		case cmdEnum::getSettings: {
+		case MANAGER_CMD::getXpLog: {
+            const int len = Utils::localSocketRequest(XPOSED_CMD::GET_XP_LOG, nullptr, 0, (int*)replyBuf.get(), REPLY_BUF_SIZE);
+            if (len == 0) {
+                frozen.log("getXpLog 工作异常, 请确认LSPosed中Frozen勾选系统框架, 然后重启");
+                replyPtr = const_cast<char*>("Frozen's Xposed log is empty. ");
+                replyLen = 32;
+            }
+            else {
+                replyPtr = replyBuf.get();
+                replyLen = len;
+            }
+        } break;
+
+		case MANAGER_CMD::getSettings: {
 			replyPtr = reinterpret_cast<char*>(settings.get());
 			replyLen = settings.size();
 		} break;
 
-		case cmdEnum::setAppCfg: {
+		case MANAGER_CMD::setAppCfg: {
 			if (recvLen == 0 || (recvLen % 12)) {
 				replyPtr = replyBuf.get();
 				replyLen = snprintf(replyBuf.get(), 128, "需要12字节的倍数, 实际收到[%u]",
@@ -359,7 +348,7 @@ public:
 			replyLen = 7;
 		} break;
 
-		case cmdEnum::setAppLabel: {
+		case MANAGER_CMD::setAppLabel: {
 			managedApp.updateAppList(); // 先更新应用列表
 
 			map<int, string> labelList;
@@ -388,19 +377,19 @@ public:
 			replyLen = 7;
 		} break;
 
-		case cmdEnum::clearLog: {
+		case MANAGER_CMD::clearLog: {
 			frozen.clearLog();
 			replyPtr = frozen.getLogPtr();
 			replyLen = frozen.getLoglen();
 		} break;
 
-		case cmdEnum::getProcState: {
+		case MANAGER_CMD::getProcState: {
 			freezer.printProcState();
 			replyPtr = frozen.getLogPtr();
 			replyLen = frozen.getLoglen();
 		} break;
 
-		case cmdEnum::setSettingsVar: {
+		case MANAGER_CMD::setSettingsVar: {
 			replyPtr = replyBuf.get();
 
 			if (recvLen != 2) {

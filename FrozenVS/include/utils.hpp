@@ -51,6 +51,9 @@
 #include <sys/system_properties.h>
 #include<sys/mount.h>
 
+#include <linux/netlink.h>
+#include <netinet/tcp.h>
+
 using std::set;
 using std::unordered_set;
 using std::map;
@@ -100,9 +103,8 @@ constexpr auto FORK_DOUBLE = 1;
 enum class WORK_MODE : uint32_t {
 	GLOBAL_SIGSTOP = 0,
 	V1F = 1,
-	V1F_ST = 2,
-	V2UID = 3,
-	V2FROZEN = 4,
+	V2UID = 2,
+	V2FROZEN = 3,
 };
 
 enum class FREEZE_MODE : uint32_t {
@@ -121,7 +123,8 @@ enum class XPOSED_CMD : uint32_t {
 	// 1359322925 是 "Freezeit" 的10进制CRC32值
 	GET_FOREGROUND = baseCode + 1,
 	GET_SCREEN = baseCode + 2,
-
+    GET_XP_LOG = baseCode + 3,
+	
 	SET_CONFIG = baseCode + 20,
 	SET_WAKEUP_LOCK = baseCode + 21,
 
@@ -142,6 +145,28 @@ enum class REPLY : uint32_t {
 enum class WAKEUP_LOCK : uint32_t {
 	IGNORE = 1,
 	DEFAULT = 3,
+};
+
+enum class MANAGER_CMD : uint32_t {
+	// 获取信息 无附加数据 No additional data required
+	getPropInfo = 2,     // return string: "ID\nName\nVersion\nVersionCode\nAuthor\nclusterNum"
+	getChangelog = 3,    // return string: "changelog"
+	getLog = 4,          // return string: "log"
+	getAppCfg = 5,       // return string: "package x\npackage x\n...
+	getRealTimeInfo = 6, // return ImgBytes[h*w*4]+String: (rawBitmap + 内存 频率 使用率 电流)
+	getSettings = 8,     // return bytes[256]: all settings parameter
+	getUidTime = 9,      // return "uid last_user_time last_sys_time user_time sys_time\n..."
+	getXpLog = 10,
+
+	// 设置 需附加数据
+	setAppCfg = 21,      // send "package x\npackage x\npackage x\n..."
+	setAppLabel = 22,    // send "uid label\nuid label\nuid label\n..."
+	setSettingsVar = 23, // send bytes[2]: [0]index [1]value
+
+	// 其他命令 无附加数据 No additional data required
+	clearLog = 61,       // return string: "log" //清理并返回log
+	getProcState = 62, // return string: "log" //打印冻结状态并返回log
+
 };
 
 struct cpuRealTimeStruct {
@@ -310,29 +335,6 @@ namespace Utils {
 		strptime(strTimeFormat, "%Y-%m-%d %H:%M:%S", &timeinfo);
 
 		return mktime(&timeinfo);
-	}
-
-	// https://blog.csdn.net/lanmanck/article/details/8423669
-	vector<int> getTouchEventNum() {
-		vector<int> res;
-
-		for (int i = 0; i < 16; i++) {
-			char path[64];
-			snprintf(path, 64, "/dev/input/event%d", i);
-			auto fd = open(path, O_RDONLY, 0);
-			if (fd < 0)continue;
-
-			uint32_t flagBit = 0;
-			constexpr uint32_t cmd = EVIOCGBIT(0, sizeof(uint32_t));
-			ioctl(fd, cmd, &flagBit);
-			if (flagBit & (1 << EV_ABS)) res.emplace_back(i);
-			close(fd);
-		}
-		if (res.size() == 0) {
-			fprintf(stderr, "前台任务同步事件获取失败");
-			exit(-1);
-		}
-		return res;
 	}
 
 	int readInt(const char* path) {
@@ -636,6 +638,15 @@ namespace MAGISK {
 		char buff[32] = { 0 };
 		Utils::popenRead("/system/bin/magisk -V", buff);
 		return isdigit(buff[0]) ? atoi(buff) : -1;
+	}
+}
+
+
+namespace APatch {
+	int get_version_code() {
+		int version = -1;
+		version = Utils::readInt("/data/adb/ap/version");
+		return version;
 	}
 }
 
