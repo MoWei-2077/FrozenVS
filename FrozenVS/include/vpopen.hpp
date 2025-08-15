@@ -121,7 +121,7 @@ namespace VPOPEN {
         return status;
     }
 
-    void vpopen(const char *absPath, const char *argv[], char *buf, const size_t len) {
+    void vpopen(const char *absPath, const char * const argv[], char *buf, const size_t len) {
         auto fp = popen_noshell(absPath, (const char *const *) argv);
         if (!fp) {
             buf[0] = 0;
