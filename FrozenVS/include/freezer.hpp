@@ -180,8 +180,6 @@ public:
 
         char fullPath[24] = "/proc/";
 
-
-
         struct dirent* file;
         while ((file = readdir(dir)) != nullptr) {
             if (file->d_name[0] < '0' || file->d_name[0] > '9') continue;
@@ -199,11 +197,10 @@ public:
 
             char readBuff[256];
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0) continue;
-            const string_view package = appInfo.package;
-            const size_t size = package.length();
-            if (strncmp(readBuff, package.data(), size)) continue;
+            const string& package = appInfo.package;
+            if (strncmp(readBuff, package.c_str(), package.length())) continue;
 
-            const char endChar = readBuff[size];
+            const char endChar = readBuff[package.length()];
             if (endChar != ':' && endChar != 0)continue;
 
             appInfo.pids.emplace_back(pid);
@@ -214,13 +211,14 @@ public:
         //临时解冻
     void unFreezerTemporary(set<int>& uids) {
         curForegroundApp.insert(uids.begin(), uids.end());
-        updateAppProcess();
+        updateAppProcess(false);
     }
 
     void unFreezerTemporary(int uid) {
         curForegroundApp.insert(uid);
-        updateAppProcess();
+        updateAppProcess(true);
     }
+
 
     map<int, vector<int>> getRunningPids(set<int>& uidSet) {
         map<int, vector<int>> pids;
@@ -257,10 +255,9 @@ public:
             char readBuff[256];
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
 
-            const string_view package = managedApp[uid].package;
-            const size_t size = package.length();
-            if (strncmp(readBuff, package.data(), size)) continue;
-            const char endChar = readBuff[size]; // 特例 com.android.chrome_zygote 无法binder冻结
+            const string& package = managedApp[uid].package;
+            if (strncmp(readBuff, package.c_str(), package.length())) continue;
+            const char endChar = readBuff[package.length()]; // 特例 com.android.chrome_zygote 无法binder冻结
             if (endChar != ':' && endChar != 0)continue;
 
             pids[uid].emplace_back(pid);
@@ -301,10 +298,9 @@ public:
 
             char readBuff[256];
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
-            const string_view package = managedApp[uid].package;
-            const size_t size  = package.length(); // 提前缓存
-            if (strncmp(readBuff, package.data(), size)) continue;
-            const char endChar = readBuff[size]; // 特例 com.android.chrome_zygote 无法binder冻结
+            const string& package = managedApp[uid].package;
+            if (strncmp(readBuff, package.c_str(), package.length())) continue;
+            const char endChar = readBuff[package.length()]; // 特例 com.android.chrome_zygote 无法binder冻结
             if (endChar != ':' && endChar != 0) continue;
 
             uids.insert(uid);
@@ -381,7 +377,6 @@ public:
 
     // < 0 : 冻结binder失败的pid， > 0 : 冻结成功的进程数
     int handleProcess(appInfoStruct& appInfo, const bool freeze) {
-
         if (freeze) {
             getPids(appInfo);
         }
@@ -512,11 +507,10 @@ public:
             char readBuff[256];
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
 
-            const string_view package = appInfo.package;
-            const size_t size = package.length();
-            if (strncmp(readBuff, package.data(), size)) continue;
+            const string& package = appInfo.package;
+            if (strncmp(readBuff, package.c_str(), package.length())) continue;
 
-            const char endChar = readBuff[size]; // 特例 com.android.chrome_zygote 无法binder冻结
+            const char endChar = readBuff[package.length()]; // 特例 com.android.chrome_zygote 无法binder冻结
             if (endChar != ':' && endChar != 0)continue;
 
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
@@ -529,7 +523,7 @@ public:
 
     void bootFreeze() {
         if (!settings.enableBootFreeze) return;
-        sleep(20);
+        sleep(15);
 		DIR* dir = opendir("/proc");
 		if (dir == nullptr) {
 			char errTips[256];
@@ -568,12 +562,10 @@ public:
             char readBuff[256];
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
 
-            const string_view package = appInfo.package;
-            const size_t size = package.length(); // 提前缓存
+            const string& package = appInfo.package;
+            if (strncmp(readBuff, package.c_str(), package.length())) continue;
 
-            if (strncmp(readBuff, package.data(), size)) continue;
-
-            const char endChar = readBuff[size]; // 特例 com.android.chrome_zygote 无法binder冻结
+            const char endChar = readBuff[package.length()]; // 特例 com.android.chrome_zygote 无法binder冻结
             if (endChar != ':' && endChar != 0)continue;
 
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
@@ -684,7 +676,7 @@ public:
 
             char readBuff[256]; // now is cmdline Content
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
-            if (strncmp(readBuff, appInfo.package.data(), appInfo.package.length())) continue;
+            if (strncmp(readBuff, appInfo.package.c_str(), appInfo.package.length())) continue;
 
             uidSet.insert(uid);
             pidSet.insert(pid);
@@ -782,7 +774,7 @@ public:
         }
     }
 
-    void updateAppProcess() {
+    void updateAppProcess(bool isunFreezerTemporary) {
         bool isupdate = false;
         vector<int> newShowOnApp, toBackgroundApp;
 
@@ -821,7 +813,7 @@ public:
         for (const int uid : toBackgroundApp) { // 更新倒计时
             isupdate = true;
             managedApp[uid].delayCnt = 0;
-            pendingHandleList[uid] = managedApp[uid].isTerminateMode() ? settings.terminateTimeout : settings.freezeTimeout;
+            pendingHandleList[uid] = managedApp[uid].isTerminateMode() ? settings.terminateTimeout : isunFreezerTemporary ? 3 : settings.freezeTimeout;
         }
 
         if (isupdate)
@@ -1384,21 +1376,27 @@ public:
                 close(skfd);
                 return -1;
             }
+            const char* Ptr = nullptr;
+            int oneway = 0;
 
-         //   const bool isNetworkType = (strstr(u_info.msg,  "type=Binder") != nullptr);
+            if (!strcmp(u_info.msg, "type=Binder")) {
+                Ptr = strstr(u_info.msg,"oneway=");
+                oneway = atoi(Ptr + 7);
+            }
+
+            if (oneway == 1 && !strcmp(u_info.msg, "bindertype=free_buffer_full")) continue;
+            
             auto ptr = strstr(u_info.msg, "target=");
 
             #if DEBUG_DURATION
                 freezeit.logFmt("ReKernel发送的通知:%s", u_info.msg);
             #endif
 
-           
-           // if (!isNetworkType) continue;
-            if (ptr != nullptr) {
+            if (ptr != nullptr) {     
                 const int uid = atoi(ptr + 7);
                 auto& appInfo = managedApp[uid];
                 if (managedApp.contains(uid) && appInfo.isPermissive && !curForegroundApp.contains(uid) && !pendingHandleList.contains(uid) && appInfo.isBlacklist()) {
-                    freezeit.logFmt("[%s] 接收到Re:Kernel的Binder信息(SYNC), 类别: transaction, 将进行临时解冻", managedApp[uid].label.c_str());     
+                    freezeit.logFmt("[%s] 接收到Re:Kernel的Binder信息, 类别: %s, 将进行临时解冻", managedApp[uid].label.c_str(), oneway ? "ASYNC" : "SYNC");     
                     unFreezerTemporary(uid);      
                 }              
             }     
@@ -1447,7 +1445,7 @@ public:
                 const int uid = atoi(ptr + 9);
                 auto& appInfo = managedApp[uid];
                 if (managedApp.contains(uid) && appInfo.isPermissive && !curForegroundApp.contains(uid) && !pendingHandleList.contains(uid) && appInfo.isBlacklist()) {
-                    freezeit.logFmt("[%s] 接收到NkBinder的Binder信息(SYNC), 类别: transaction, 将进行临时解冻", managedApp[uid].label.c_str());     
+                    freezeit.logFmt("[%s] 接收到NkBinder的Binder信息, 类别: SYNC, 将进行临时解冻", managedApp[uid].label.c_str());     
                     unFreezerTemporary(uid);      
                 } 
             }
@@ -1462,7 +1460,7 @@ public:
             curForegroundApp = std::move(curFgBackup); // recovery                
         else 
             getVisibleAppByLocalSocket(); 
-        updateAppProcess();
+        updateAppProcess(false);
     }
 
     [[noreturn]] void cycleThreadFunc() {
@@ -1480,7 +1478,7 @@ public:
             if (doze.checkIfNeedToEnter()) {
             //不冻结息屏前的最后一个应用只需要再加上一个判断功能是否开启即可实现
                 curFgBackup = std::move(curForegroundApp); //backup
-                updateAppProcess();
+                updateAppProcess(false);
             }
             
             if (doze.isScreenOffStandby) continue;// 息屏状态 不用执行 以下功能
@@ -1521,8 +1519,8 @@ public:
 
             char readBuff[256];
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
-            const string_view package = managedApp[uid].package;
-            if (strncmp(readBuff, package.data(), package.length())) continue;
+            const string& package = managedApp[uid].package;
+            if (strncmp(readBuff, package.c_str(), package.length())) continue;
 
             uids.insert(uid);
         }

@@ -380,6 +380,14 @@ private:
         "com.kmxs.reader",              // 七猫免费小说
         "com.hihonor.cloudmusic",       // 网易云音乐荣耀版
         "tv.danmaku.bili",              // B站
+        "com.miui.accessibility",       // 小米闻声
+        "com.miui.player",              // 小米音乐
+        "com.kugou.viper",              // VIPER HIFI
+        "cmccwm.mobilemusic",           // 咪咕音乐
+        "com.kugou.android.elder",      // 酷狗大字版
+        "com.ting.mp3.android",         // 千千音乐
+        "com.apple.android.music",      // Apple音乐
+        "cn.wenyu.bodian",              // 波点音乐
     };
 
     const unordered_set<string_view> whiteListDefault{
@@ -470,15 +478,16 @@ public:
         string_view sysEnd("@system");
         string line;
         while (getline(ss, line)) {
-            if (line.length() < 10) continue;
-            if (line.starts_with("com.google.android.trichromelibrary")) continue;
+            string_view line_view (line);
+            if (line_view.length() < 10) continue;
+            if (line_view.starts_with("com.google.android.trichromelibrary")) continue;
 
             int uid;
             char package[256] = {};
-            sscanf(line.c_str(), "%s %d", package, &uid);
+            sscanf(line_view.data(), "%s %d", package, &uid);
             if (uid < UID_START || UID_END <= uid) continue;
 
-            const string& packageName{ package };
+            const string_view& packageName{ package };
             _allAppList[uid] = packageName;
             if (!line.ends_with(sysEnd))
                 _thirdAppList[uid] = packageName;
@@ -495,12 +504,13 @@ public:
 
         string line;
         while (getline(ss, line)) {
-            if (line.length() < 10) continue;
-            if (line.starts_with("com.google.android.trichromelibrary")) continue;
+            string_view line_view (line);
+            if (line_view.length() < 10) continue;
+            if (line_view.starts_with("com.google.android.trichromelibrary")) continue;
 
             int uid;
             char package[256] = {};
-            sscanf(line.c_str(), "%s %d", package, &uid);
+            sscanf(line_view.data(), "%s %d", package, &uid);
             if (uid < UID_START || UID_END <= uid) continue;
 
             _allAppList[uid] = package;
@@ -606,7 +616,7 @@ public:
             if (appInfo.uid < UID_START || allAppList.contains(appInfo.uid))continue;
 
             appInfo.uid = -1;
-            appInfo.package = nullptr;
+            appInfo.package.clear();
             appInfo.label.clear();
             appInfo.pids.clear();
         }
@@ -705,7 +715,7 @@ public:
         for (auto& appInfo : appInfoMap) {
             if (appInfo.uid < UID_START)continue;
 
-            if (isSystemApp(appInfo.package.data()) || whiteListDefault.contains(appInfo.package))
+            if (isSystemApp(appInfo.package.c_str()) || whiteListDefault.contains(appInfo.package))
                 appInfo.freezeMode = FREEZE_MODE::WHITELIST;
         }
 
@@ -736,9 +746,10 @@ public:
         tmp.reserve(1024UL * 128);
         for (const auto& appInfo : appInfoMap) {
             if (appInfo.uid < UID_START)continue;
-
+            
             if (appInfo.freezeMode < FREEZE_MODE::WHITEFORCE) {
-                tmp.append(appInfo.package).append("  ");  
+                tmp += appInfo.package;
+                tmp += " ";
                 tmp += to_string((int)(appInfo.freezeMode));
                 tmp += " ";
                 tmp += to_string(appInfo.isPermissive ? 1 : 0);

@@ -227,7 +227,7 @@ struct appInfoStruct {
     time_t startTimestamp = 0;     // 某次开始运行时刻
     time_t stopTimestamp = 0;      // 某次冻结运行时刻
     time_t totalRunningTime = 0;   // 运行时长
-    string_view package;                // 包名
+    string package;                // 包名
     string label;                  // 名称
     vector<int> pids;              // PID列表
     bool needBreakNetwork() const {

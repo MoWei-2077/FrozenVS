@@ -41,11 +41,11 @@ private:
                 if (line[line.length() - 6] != ',')continue;
 
                 int uid = atoi(line.c_str() + line.length() - 5);
-                if (!managedApp.contains(uid))continue;
+                if (managedApp.without(uid))continue;
 
                 auto& appInfo = managedApp[uid];
                 if (appInfo.isBlacklist()) {
-                    tmp.append("dumpsys  deviceidle whitelist -").append(appInfo.package) .append(";");
+                    tmp += "dumpsys deviceidle whitelist -" + appInfo.package + ";";
                     tmpLabel += appInfo.label + " ";
                 }
                 else
@@ -56,14 +56,14 @@ private:
                 freezeit.logFmt("移除电池优化白名单: %s", tmpLabel.c_str());
                 system(tmp.c_str());
             }
-
+    /*
             tmp.clear();
             tmpLabel.clear();
             for (const auto& appInfo : managedApp.appInfoMap) {
                 if (appInfo.uid < ManagedApp::UID_START || appInfo.isSystemApp) continue;
 
                 if (appInfo.isWhitelist() && !existSet.contains(appInfo.uid)) {
-                    tmp.append("dumpsys  deviceidle whitelist +").append(appInfo.package) .append(";");
+                    tmp += "dumpsys deviceidle whitelist +" + appInfo.package + ";";
                     tmpLabel += appInfo.label + " ";
                 }
             }
@@ -79,7 +79,7 @@ private:
                 if (tmp.length())
                     freezeit.logFmt("已在白名单: %s", tmp.c_str());
             }
-
+        */
         END_TIME_COUNT;
     }
 
@@ -208,7 +208,6 @@ public:
         isScreenOffStandby = false;
         
         if (settings.enableDoze) { 
-            //if (!Utils::popenShell("dumpsys deviceidle unforce")) freezeit.log("退出Standby休眠模式失败");
             system("dumpsys deviceidle unforce");
 
             int deltaTime = time(nullptr) - enterDozeTimeStamp;
@@ -279,21 +278,20 @@ public:
 
     bool checkIfNeedToEnter() {
         constexpr int TIMEOUT = 60;
-        static time_t lastCheckTime = 0;
-        const time_t nowTimeStamp = time(nullptr);
+        static int secCnt = 30;
 
-        if (isScreenOffStandby || (nowTimeStamp - lastCheckTime) < TIMEOUT) 
+        if (isScreenOffStandby || ++secCnt < TIMEOUT)
+            return false;
+
+        secCnt = 0;
+
+        if (isInteractive())
+            return false;
+
+        const time_t nowTimeStamp = time(nullptr);
+        if ((nowTimeStamp - lastInteractiveTime) < (TIMEOUT + 60L))
             return false;
         
-        if (isInteractive()) {
-            lastCheckTime = nowTimeStamp;    
-            return false;
-        }
-    
-        if ((nowTimeStamp - lastInteractiveTime) < (TIMEOUT + 60)) 
-            return false;
-        
- 
         if (settings.enableDebug)
             freezeit.log("息屏状态已超时，正在确认息屏状态");
 
@@ -311,7 +309,7 @@ public:
         if (settings.enableDoze) {
             if (settings.enableDebug)
                 freezeit.log("开始准备深度Doze");
-            if (settings.enableClearBatteryList) 
+            if (settings.enableClearBatteryList)
                 updateDozeWhitelist();
             updateUidTime();
 
@@ -320,9 +318,9 @@ public:
             enterDozeCycleStamp = systemTools.cycleCnt;
 
             system(
-				"dumpsys deviceidle enable all;"
-				"dumpsys deviceidle force-idle deep"
-			);
+                "dumpsys deviceidle enable all;"
+                "dumpsys deviceidle force-idle deep"
+            );
         }
         return true;
     }
@@ -341,10 +339,11 @@ public:
             int uid;
             long long userTime, systemTime; // us 微秒
             sscanf(line.c_str(), "%d: %lld %lld", &uid, &userTime, &systemTime);
-            if (managedApp.contains(uid) && (userTime >= 1000 || systemTime >= 1000)) {
+            auto& appInfo = managedApp[uid];
+            if (appInfo.isBlacklist() && (userTime >= 1000 || systemTime >= 1000)) {
                 auto& appTime = uidTime[uid];
                 appTime.lastTotal = appTime.total;
-                appTime.total = (int)((systemTime + userTime) / 1000);  // ms 取毫秒
+                appTime.total = int((systemTime + userTime) / 1000);  // ms 取毫秒
             }
         }
 
