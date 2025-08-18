@@ -1263,7 +1263,7 @@ public:
 		char buf[8192];
 		while (read(inotifyFd, buf, sizeof(buf)) > 0) {
 			threadUnFreezeFunc();
-			Utils::sleep_ms(100);// 防抖
+			Utils::sleep_ms(200);// 防抖
 			threadUnFreezeFunc();
 		}
 
@@ -1456,9 +1456,11 @@ public:
     }
 
     void threadUnFreezeFunc() {
-        if (doze.isScreenOffStandby && doze.checkIfNeedToExit())
-            curForegroundApp = std::move(curFgBackup); // recovery                
-        else 
+        // 并未进入Standby模式 但是已经息屏的状态
+        if (doze.isScreenOffStandby) {
+            if (doze.checkIfNeedToExit()) // 发现有活动或者正在亮屏
+                curForegroundApp = std::move(curFgBackup); // recovery                     
+        } else 
             getVisibleAppByLocalSocket(); 
         updateAppProcess(false);
     }
@@ -1475,7 +1477,7 @@ public:
             processPendingApp();//1秒一次
         
             // 2分钟一次 在亮屏状态检测是否已经息屏  息屏状态则检测是否再次强制进入深度Doze
-            if (doze.checkIfNeedToEnter()) {
+            if (doze.checkIfNeedToEnter()) { // 已经息屏并进入Doze 
             //不冻结息屏前的最后一个应用只需要再加上一个判断功能是否开启即可实现
                 curFgBackup = std::move(curForegroundApp); //backup
                 updateAppProcess(false);

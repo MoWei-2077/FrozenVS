@@ -41,7 +41,7 @@ private:
                 if (line[line.length() - 6] != ',')continue;
 
                 int uid = atoi(line.c_str() + line.length() - 5);
-                if (managedApp.without(uid))continue;
+                if (!managedApp.contains(uid))continue;
 
                 auto& appInfo = managedApp[uid];
                 if (appInfo.isBlacklist()) {
@@ -289,7 +289,7 @@ public:
             return false;
 
         const time_t nowTimeStamp = time(nullptr);
-        if ((nowTimeStamp - lastInteractiveTime) < (TIMEOUT + 60L))
+        if ((nowTimeStamp - lastInteractiveTime) < (TIMEOUT + 60L))// 需要120秒才能进入深度Doze
             return false;
         
         if (settings.enableDebug)
@@ -297,7 +297,7 @@ public:
 
         // 如果系统之前已经自行进入轻度Doze, 退出Doze的瞬间（此时可能还没亮屏）导致现在才执行时间判断
         // 此时进入Doze不合理，需等等，再确认一遍
-        usleep(1000 * 200); // 休眠 200ms
+        usleep(1000 * 100); // 休眠 100ms
         if (isInteractive()) {
             if (settings.enableDebug)
                 freezeit.log("确认新状态：已亮屏或充电中, 退出息屏");

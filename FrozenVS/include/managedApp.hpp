@@ -37,7 +37,7 @@ private:
             "com.miui.systemAdSolution",            // 智能助理 广告相关 冻结会导致酷安等应用卡顿
             "com.mfashiongallery.emag",             // 小米画报
             "com.huawei.hwid",                      // HMS core服务
-
+            "com.miui.home",                        // 小米桌面
             "cn.litiaotiao.app",                    // 李跳跳
             "com.litiaotiao.app",                   // 李跳跳
             "hello.litiaotiao.app",                 // 李跳跳
@@ -58,7 +58,7 @@ private:
             "org.meowcat.xposed.mipush",            // 小米推送框架增强
             "top.trumeet.mipush",                   // 小米推送服务
             "com.meizu.cloud",                      // 魅族推送服务
-            "com.meizu.flyme.find",                  // 魅族查找手机服务
+            "com.meizu.flyme.find",                 // 魅族查找手机服务
             "one.yufz.hmspush",                     // HMSPush服务
             "app.lawnchair",                        // Lawnchair
             "com.microsoft.launcher",               // 微软桌面
