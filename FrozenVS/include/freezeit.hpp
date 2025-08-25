@@ -52,7 +52,6 @@ private:
 
         memcpy(logCache + position, logStr, len);
         position += len;
-
     }
 
     void toFile(const char* logStr, const int len) {
@@ -76,7 +75,6 @@ private:
         fwrite(logStr, 1, len, fp);
         fclose(fp);
     }
-
 public:
 
         map<string, string> prop{
@@ -292,7 +290,7 @@ public:
 
         if (!toFileFlag)
             toMem(lineCache, len);
-        else
+        else 
             toFile(lineCache, len);
     }
 

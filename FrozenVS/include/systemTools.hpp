@@ -44,9 +44,7 @@ public:
 
     char cpuTempPath[256] = "/sys/class/thermal/thermal_zone0/temp";
 
-    atomic<bool> isAudioPlaying{false};
-    // bool isMicrophoneRecording = false;
-
+    bool isMicrophoneRecording = false;
 
     SystemTools& operator=(SystemTools&&) = delete;
 
@@ -74,6 +72,7 @@ public:
         settings.enableBGIntention = 1;
         settings.enableBinderFreeze = 0;    
     }
+
     size_t formatRealTime(int* ptr) {
 
         int i = 0;
@@ -119,52 +118,28 @@ public:
 
         // https://cs.android.com/android/platform/superproject/+/master:system/memory/lmkd/lmkd.cpp
         // https://source.android.com/devices/tech/perf/lmkd
-
-        // page(1 page  = 4KB)
-        // 18432:0,23040:100,27648:200,32256:250,55296:900,80640:950
-        //  8192:0,12288:100,16384:200,32768:250,65536:900,96000:950
-        //  4096:0,5120:100,8192:200,32768:250,65536:900,96000:950
+        // https://source.android.com/docs/core/perf/lmkd
         static constexpr const char* lmkdParameter[] = {
+                "ro.config.low_ram", "false",// A10
+                "ro.lmk.use_psi", "true",
+                "ro.lmk.use_minfree_levels", "false",
                 "ro.lmk.low", "1001",
                 "ro.lmk.medium", "1001",
-                "ro.lmk.critical", "1001",
-                "ro.lmk.super_critical", "1001",
-                "ro.lmk.reclaim_scan_threshold", "1024",
-                "ro.lmk.use_new_strategy", "true",
-                "ro.lmk.debug", "false",
-                "ro.config.low_ram", "false",
-                "ro.lmk.critical_upgrade", "false",
-                "ro.lmk.use_minfree_levels", "false",
-                "ro.lmk.kill_heaviest_task", "false",
-                "ro.lmk.kill_timeout_ms", "2147483647",
-                "ro.lmk.thrashing_limit", "100",
-                "ro.lmk.enable_adaptive_lmk", "false",
-                "ro.lmk.use_psi", "true",
-                "ro.lmk.thrashing_limit_decay", "10",
-                "ro.lmk.psi_partial_stall_ms", "800",
-                "ro.lmk.psi_complete_stall_ms", "1000",
+                "ro.lmk.critical", "0",
+                "ro.lmk.critical_upgrade", "false",   
+                "ro.lmk.upgrade_pressure", "100",
                 "ro.lmk.downgrade_pressure", "100",
-                "persist.sys.lmk.reportkills", "false",
-                "ro.lmk.swap_free_low_percentage", "10",
-                "ro.lmk.direct_reclaim_pressure", "100",
-                "ro.lmk.super_critical", "1001",
-                "sys.lmk.minfree_levels",
-                "4096:1001,5120:1001,8192:1001,32768:1001,96000:1001,131072:1001",
+                "ro.lmk.kill_heaviest_task", "false",
+                "ro.lmk.kill_timeout_ms", "0", // 以下是A11以上的选项
+                "ro.lmk.psi_partial_stall_ms", "200",
+                "ro.lmk.psi_complete_stall_ms", "700",
+                "ro.lmk.thrashing_limit", "30",
+                "ro.lmk.thrashing_limit_decay", "50",
+                "ro.lmk.swap_util_max", "100",
+                "ro.lmk.swap_free_low_percentage", "10", // 将被遗弃的旧选项
+                "ro.lmk.debug", "false", // 将被遗弃的旧选项
         };
-        // const char* adj = "0,100,200,250,900,950"; //另有 0,1,2,4,9,12
-        static constexpr const char* minfree = "8192,12288,16384,32768,55296,80640";
-
-        int len = 14;
-        if (!access("/sys/module/lowmemorykiller/parameters", F_OK)) {
-            len -= 2;
-
-            if (!Utils::writeString("/sys/module/lowmemorykiller/parameters/enable_lmk",
-                "1", 2))
-                freezeit.log("调整lmk参数: 设置 enable_lmk 失败");
-            if (!Utils::writeString("/sys/module/lowmemorykiller/parameters/minfree",
-                minfree, sizeof(minfree)))
-                freezeit.log("调整lmk参数: 设置 minfree 失败");
-        }
+        int len = 36; // 执行两遍 lmkdParameter的条数
         if (freezeit.moduleEnv == "Magisk") {
             string cmd;
             for (int i = 0; i < len; i += 2)
@@ -622,7 +597,6 @@ public:
         return buff[0];
     }
 
-
     int GetProperty(const char* key, char* res) {
         const prop_info* pi = __system_property_find(key); //如果频繁使用，建议缓存 对应Key的 prop_info
         if (pi == nullptr) {
@@ -724,9 +698,8 @@ public:
                         playbackDevicesCnt--;
                 }
             }
-            isAudioPlaying.store(playbackDevicesCnt > 0, std::memory_order_relaxed);
-            //isAudioPlaying = playbackDevicesCnt > 0;
-            usleep(250 * 1000);
+            isMicrophoneRecording = playbackDevicesCnt > 0;
+            usleep(500 * 1000);
         }
 
         inotify_rm_watch(inotifyFd, watch_d);

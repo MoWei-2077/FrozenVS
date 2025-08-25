@@ -148,4 +148,11 @@ namespace VPOPEN {
             fprintf(stderr, "%s() close 异常status[%d] [%d]:[%s]", __FUNCTION__, status, errno,
                     strerror(errno));
     }
+
+    void popenRead(const char* cmd, char* buf, size_t len) {
+        auto fp = popen(cmd, "r");
+        if (!fp) return;
+        while (fgets(buf, len, fp) != nullptr)
+        pclose(fp);
+    }
 };

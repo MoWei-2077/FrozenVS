@@ -129,7 +129,7 @@ enum class FREEZE_MODE : uint32_t {
 const int baseCode = 1668424211;
 
 enum class XPOSED_CMD : uint32_t {
-    // 1359322925 是 "Frozen" 的10进制CRC32值
+    // 1668424211 是 "Frozen" 的10进制CRC32值
     GET_FOREGROUND = baseCode + 1,
     GET_SCREEN = baseCode + 2,
     GET_XP_LOG = baseCode + 3,
@@ -141,6 +141,7 @@ enum class XPOSED_CMD : uint32_t {
 
     UPDATE_PENDING = baseCode + 60,   // 更新待冻结应用
     UPDATE_PENDINGINTENT = baseCode + 80, // 后台意图
+    GET_AUDIO_APP = baseCode + 81, // 音频播放的UID
 };
 
 enum class REPLY : uint32_t {
@@ -220,8 +221,8 @@ static constexpr const char* const digit_pairs =
 struct appInfoStruct { 
     int uid = -1;
     FREEZE_MODE freezeMode = FREEZE_MODE::FREEZER; // [10]:杀死 [20]:SIGSTOP [30]:freezer [40]:配置 [50]:内置
-    bool isAudioPlaying = false;   // 音频播放
     bool isPermissive = true;      // 宽容的 有前台服务也算前台
+    bool isFrozen = false;         // 是否被冻结
     int delayCnt = 0;              // 冻结失败计数
     bool isSystemApp = true;       // 是否系统应用
     time_t startTimestamp = 0;     // 某次开始运行时刻
@@ -338,9 +339,9 @@ namespace Utils {
             memcpy(p, &digit_pairs[pos], 2);
         } else *--p = '0' + value;
 
-        size_t len = tmp + 6 - p;
+        size_t len = tmp + 7 - p;
 
-        memcpy(buffer, p, len + 1);
+        memcpy(buffer, p, len);
         
         return buffer;
     }

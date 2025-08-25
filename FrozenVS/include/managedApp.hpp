@@ -37,7 +37,7 @@ private:
             "com.miui.systemAdSolution",            // 智能助理 广告相关 冻结会导致酷安等应用卡顿
             "com.mfashiongallery.emag",             // 小米画报
             "com.huawei.hwid",                      // HMS core服务
-            "com.miui.home",                        // 小米桌面
+
             "cn.litiaotiao.app",                    // 李跳跳
             "com.litiaotiao.app",                   // 李跳跳
             "hello.litiaotiao.app",                 // 李跳跳
@@ -58,7 +58,7 @@ private:
             "org.meowcat.xposed.mipush",            // 小米推送框架增强
             "top.trumeet.mipush",                   // 小米推送服务
             "com.meizu.cloud",                      // 魅族推送服务
-            "com.meizu.flyme.find",                 // 魅族查找手机服务
+            "com.meizu.flyme.find",                  // 魅族查找手机服务
             "one.yufz.hmspush",                     // HMSPush服务
             "app.lawnchair",                        // Lawnchair
             "com.microsoft.launcher",               // 微软桌面
@@ -220,7 +220,6 @@ private:
             "com.tencent.soter.soterserver", // SoterService
             "com.unionpay.tsmservice.mi", // 银联可信服务安全组件小米版本
 
-
             "android.ext.services", // Android Services Library
             "android.ext.shared", // Android Shared Library
             "com.android.adservices.api", // Android AdServices
@@ -361,33 +360,6 @@ private:
             "org.lineageos.setupwizard.auto_generated_rro_product__",
             "org.lineageos.updater.auto_generated_rro_product__",
             "org.protonaosp.deviceconfig.auto_generated_rro_product__",
-
-    };
-    const unordered_set<string> AudioPlayerList{
-        "com.netease.cloudmusic",       // 网易云音乐
-        "com.tencent.qqmusic",          // QQ音乐
-        "com.kugou.android",            // 酷狗音乐    
-        "com.kugou.android.lite",       // 酷狗音乐概念版
-        "cn.kuwo.player",               // 酷我音乐
-        "com.xs.fm",                    // 番茄畅听
-        "com.dragon.read",              // 番茄免费小说
-        "com.xs.fm.lite",               // 番茄畅听音乐版
-        "com.kugou.android.child",      // 酷狗儿歌
-        "com.luna.music",               // 汽水音乐
-        "cn.toside.music.mobile",       // 洛雪音乐
-        "com.ximalaya.ting.android",    // 喜马拉雅
-        "com.tencent.karaoke",          // 全民K歌
-        "com.kmxs.reader",              // 七猫免费小说
-        "com.hihonor.cloudmusic",       // 网易云音乐荣耀版
-        "tv.danmaku.bili",              // B站
-        "com.miui.accessibility",       // 小米闻声
-        "com.miui.player",              // 小米音乐
-        "com.kugou.viper",              // VIPER HIFI
-        "cmccwm.mobilemusic",           // 咪咕音乐
-        "com.kugou.android.elder",      // 酷狗大字版
-        "com.ting.mp3.android",         // 千千音乐
-        "com.apple.android.music",      // Apple音乐
-        "cn.wenyu.bodian",              // 波点音乐
     };
 
     const unordered_set<string_view> whiteListDefault{
@@ -445,8 +417,9 @@ public:
     bool contains(const string& package) const { return uidIndex.contains(package); }
 
     auto& getLabel(const int uid) { return appInfoMap[uid - UID_START].label; }
+    
 
-    const unordered_set<string>& getAudioPlayerList() const { return AudioPlayerList; }
+    bool isBlackList(const int uid) { return contains(uid) && appInfoMap[uid - UID_START].isBlacklist(); }
 
     int getUid(const string& package) { return uidIndex[package]; }
 
@@ -601,6 +574,7 @@ public:
                 .uid = uid,
                 .freezeMode = isSYS ? FREEZE_MODE::WHITELIST : FREEZE_MODE::FREEZER,
                 .isPermissive = true,
+                .isFrozen = false,
                 .delayCnt = 0,
                 .isSystemApp = isSYS,
                 .startTimestamp = 0,
