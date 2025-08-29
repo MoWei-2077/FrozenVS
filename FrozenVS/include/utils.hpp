@@ -141,7 +141,6 @@ enum class XPOSED_CMD : uint32_t {
 
     UPDATE_PENDING = baseCode + 60,   // 更新待冻结应用
     UPDATE_PENDINGINTENT = baseCode + 80, // 后台意图
-    GET_AUDIO_APP = baseCode + 81, // 音频播放的UID
 };
 
 enum class REPLY : uint32_t {
@@ -620,9 +619,8 @@ namespace Utils {
         if (fd <= 0) return false;
 
         char tmp[16]; 
-        //auto len = FastSnprintf(tmp, sizeof(tmp), "%d", value);
-        itoa(value, tmp);
-        write(fd, tmp, strlen(tmp));
+        auto len = FastSnprintf(tmp, sizeof(tmp), "%d", value);
+        write(fd, tmp, len);
         close(fd);
         return true;
     }

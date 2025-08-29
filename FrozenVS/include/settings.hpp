@@ -37,9 +37,11 @@ private:
             0,  //[22] 全局断网
             0,  //[23] 清理电池优化白名单
             0,  //[24] ReKernel临时解冻
-            1,  //[25] NkBinder临时解冻
-            0,  //[26] 极简模式
-            0,  //[27] 后台意图
+            1,  //[25] ReKernel网络解冻
+            1,  //[26] NkBinder临时解冻
+            0,  //[27] 极简模式
+            0,  //[28] 后台意图
+            1,  //[29] 省电模式
             0,  //[30] 详细日志
             0,  //[31] 
             0,  //[32]
@@ -68,10 +70,11 @@ public:
     uint8_t& enableBreakNetwork = settingsVar[22];      // 全局断网
     uint8_t& enableClearBatteryList = settingsVar[23];  // 清理电池优化白名单
     uint8_t& enableReKernel = settingsVar[24];          // ReKernel临时解冻
-   // uint8_t& enableNetWorkUnfreezer = settingsVar[25];  // ReKernel网络解冻
-    uint8_t& enableNkBinder = settingsVar[25];          // NkBinder临时解冻
-    uint8_t& enableEzMode = settingsVar[26];            // 极简模式
-    uint8_t& enableBGIntention = settingsVar[27];       // 后台意图
+    uint8_t& enableNetWorkUnfreezer = settingsVar[25];  // ReKernel网络解冻
+    uint8_t& enableNkBinder = settingsVar[26];          // NkBinder临时解冻
+    uint8_t& enableEzMode = settingsVar[27];            // 极简模式
+    uint8_t& enableBGIntention = settingsVar[28];       // 后台意图
+    uint8_t& enableStandby = settingsVar[29];           // 省电模式
     uint8_t& enableDebug = settingsVar[30];             // 详细日志
 
     Settings& operator=(Settings&&) = delete;
@@ -222,11 +225,11 @@ public:
         case 22: // 全局断网
         case 23: // 清理电池白名单
         case 24: // ReKernel临时解冻
-        case 25: // NkBinder
-    //    case 25: // 网络解冻
-        case 26: // 极简模式
-        case 27: // 后台意图
-        
+        case 25: // 网络解冻
+        case 26: // NkBinder临时解冻
+        case 27: // 极简模式
+        case 28: // 后台意图
+        case 29: // 省电模式
         case 30: // 详细日志
         {
             if (val != 0 && val != 1)

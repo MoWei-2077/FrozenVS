@@ -34,7 +34,7 @@ public:
     uint32_t cycleCnt = 0;
 
     MemInfoStruct memInfo;
-
+    mutex mtx;
     int cpuTemperature{ 0 };
     int batteryWatt{ 0 };
 
@@ -45,7 +45,7 @@ public:
     char cpuTempPath[256] = "/sys/class/thermal/thermal_zone0/temp";
 
     bool isMicrophoneRecording = false;
-
+    
     SystemTools& operator=(SystemTools&&) = delete;
 
     SystemTools(Freezeit& freezeit, Settings& settings) :
@@ -698,7 +698,10 @@ public:
                         playbackDevicesCnt--;
                 }
             }
-            isMicrophoneRecording = playbackDevicesCnt > 0;
+            {
+                std::lock_guard<std::mutex> lock(mtx);
+                isMicrophoneRecording = playbackDevicesCnt > 0;
+            }
             usleep(500 * 1000);
         }
 

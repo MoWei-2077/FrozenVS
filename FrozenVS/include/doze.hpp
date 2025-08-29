@@ -16,7 +16,7 @@ private:
     time_t enterDozeTimeStamp = 0;
     uint32_t enterDozeCycleStamp = 0;
     time_t lastInteractiveTime = time(nullptr); // 上次检查为 亮屏或充电 的时间戳
-
+    mutex mtx;
     void updateDozeWhitelist() {
         START_TIME_COUNT;
 
@@ -56,9 +56,8 @@ private:
             freezeit.logFmt("移除电池优化白名单: %s", tmpLabel.c_str());
             system(tmp.c_str());
         }
-
-        END_TIME_COUNT;
-    }
+		END_TIME_COUNT;
+	}
 
     // 0获取失败 1息屏 2亮屏
     int getScreenByLocalSocket() {
@@ -82,7 +81,8 @@ private:
         }
 
         const char* str[3] = { "Xposed 获取屏幕状态失败", "Xposed 息屏中", "Xposed 亮屏中" };
-        freezeit.log(str[buff[0] < 3 ? buff[0] : 1]);
+        if (settings.enableDebug)
+            freezeit.log(str[buff[0] < 3 ? buff[0] : 1]);
 
 
         END_TIME_COUNT;
@@ -115,11 +115,13 @@ private:
                 mScreenState = getScreenByLocalSocket();
 
             if (mScreenState != 1 && mScreenState != 2)
-                freezeit.logFmt("屏幕其他状态 mScreenState[%d]", mScreenState);
+                if (settings.enableDoze)
+                    freezeit.logFmt("屏幕其他状态 mScreenState[%d]", mScreenState);
 
             // 设备活跃状态
             if (mScreenState == 2 || mScreenState == 5 || mScreenState == 6) {
-                freezeit.logFmt("亮屏中 mScreenState[%d]", mScreenState);
+                if (settings.enableDoze)
+                    freezeit.logFmt("亮屏中 mScreenState[%d]", mScreenState);
                 break;
             }
 
@@ -133,11 +135,14 @@ private:
             // 以下则是息屏: 1 3 4
             // 
             // 认定设备活跃状态
-            if (systemTools.isMicrophoneRecording) {
-                if (settings.enableDebug)
-                    freezeit.log("息屏, 播放中");
-                break;
-            } 
+            {
+                std::lock_guard<std::mutex> lock(mtx);
+                if (systemTools.isMicrophoneRecording) {
+                    if (settings.enableDebug)
+                        freezeit.log("息屏, 播放中");
+                    break;
+                } 
+            }
             // "Unknown", "Charging", "Discharging", "Not charging", "Full"
             // https://cs.android.com/android/kernel/superproject/+/common-android-mainline-kleaf:common/drivers/power/supply/power_supply_sysfs.c;l=75
             char res[64];
@@ -252,7 +257,7 @@ public:
     }
 
     bool checkIfNeedToEnter() {
-        constexpr int TIMEOUT = 3 * 60;
+        constexpr int TIMEOUT = 60;
         static int secCnt = 30;
 
         if (isScreenOffStandby || ++secCnt < TIMEOUT)
@@ -280,9 +285,11 @@ public:
 
         isScreenOffStandby = true;
 
+
         if (settings.enableDoze) {
             freezeit.log("开始准备深度Doze");
-            updateDozeWhitelist();
+            if (settings.enableClearBatteryList)
+                updateDozeWhitelist();
             updateUidTime();
 
             freezeit.log("😴 进入深度Doze");
@@ -291,8 +298,9 @@ public:
 
             system(
                 "dumpsys deviceidle enable all;"
-                "dumpsys deviceidle force-idle deep"
+                "dumpsys deviceidle force-idle deep"   
             );
+            //system("dumpsys deviceidle force-idle");
         }
         return true;
     }
