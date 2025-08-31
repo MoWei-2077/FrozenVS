@@ -21,7 +21,7 @@ private:
     map<string, int> uidIndex;
     map<int, cfgStruct> cfgTemp;
 
-    const unordered_set<string_view> whiteListForce{
+    const unordered_set<string> whiteListForce{
             "com.xiaomi.mibrain.speech",            // 系统语音引擎
             "com.xiaomi.scanner",                   // 小爱视觉
             "com.xiaomi.xmsf",                      // Push
@@ -362,7 +362,7 @@ private:
             "org.protonaosp.deviceconfig.auto_generated_rro_product__",
     };
 
-    const unordered_set<string_view> whiteListDefault{
+    const unordered_set<string> whiteListDefault{
         "com.mi.health",                        // 小米运动健康
         "com.tencent.mm.wxa.sce",               // 微信小程序   三星OneUI专用
 
@@ -434,6 +434,7 @@ public:
         homePackage = package;
         const auto& it = uidIndex.find(package);
         if (it == uidIndex.end()) {
+            if (package == "com.android.settings") return;      
             freezeit.logFmt("当前桌面信息异常，建议反馈: [%s]", package.c_str());
             return;
         }
@@ -736,7 +737,6 @@ public:
     }
 
     void update2xposedByLocalSocket() {
-
         string tmp;
         tmp.reserve(1024L * 16);
 
@@ -746,7 +746,7 @@ public:
         }
         tmp += '\n';
 
-        vector<int> tolerantUids;
+        vector<int> permissiveUids;
         for (const auto& appInfo : appInfoMap) {
             if (appInfo.uid < UID_START)continue;
 
@@ -757,11 +757,11 @@ public:
             tmp += ' ';
 
             if (appInfo.isPermissive)
-                tolerantUids.emplace_back(appInfo.uid);
+                permissiveUids.emplace_back(appInfo.uid);
         }
         tmp += '\n';
 
-        for (const int uid : tolerantUids) {
+        for (const int uid : permissiveUids) {
             tmp += to_string(uid);
             tmp += ' ';
         }
@@ -769,7 +769,7 @@ public:
 
         for (int i = 0; i < 3; i++) {
             int buff[8];
-            int recvLen = Utils::localSocketRequest(XPOSED_CMD::SET_CONFIG, tmp.c_str(),
+            const int recvLen = Utils::localSocketRequest(XPOSED_CMD::SET_CONFIG, tmp.c_str(),
                 tmp.length(), buff, sizeof(buff));
 
             if (recvLen != 4) {
@@ -794,7 +794,7 @@ public:
                 return;
             }
         }
-        freezeit.logFmt("%s() 工作异常, 请确认LSPosed中Frozen勾选系统框架, 然后重启 sendLen[%lu]", __FUNCTION__,
+        freezeit.logFmt("%s() 工作异常, 请确认LSPosed中冻它勾选系统框架, 然后重启 sendLen[%lu]", __FUNCTION__,
             tmp.length());
     }
 

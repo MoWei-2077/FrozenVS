@@ -20,7 +20,7 @@ private:
     void updateDozeWhitelist() {
         START_TIME_COUNT;
 
-        const char* cmdList[] = { "/system/bin/dumpsys", "dumpsys", "deviceidle", "whitelist",
+        static constexpr const char* cmdList[] = { "/system/bin/dumpsys", "dumpsys", "deviceidle", "whitelist",
                                  nullptr };
         char buf[1024 * 32];
         VPOPEN::vpopen(cmdList[0], cmdList + 1, buf, sizeof(buf));
@@ -110,9 +110,10 @@ private:
             //    mScreenState = getScreenByLocalSocket();
             //else mScreenState = res[0] - '0';
 
-            int mScreenState = systemTools.getScreenProperty();
-            if (mScreenState < 0)
-                mScreenState = getScreenByLocalSocket();
+            //int mScreenState = systemTools.getScreenProperty();
+            int mScreenState =  getScreenByLocalSocket();
+            //if (mScreenState < 0)
+              //  mScreenState = getScreenByLocalSocket();
 
             if (mScreenState != 1 && mScreenState != 2)
                 if (settings.enableDoze)

@@ -343,7 +343,16 @@ public:
                     freezeit.logFmt("内存回收: %s PID:%d 类型:文件", appInfo.label.c_str(), pid);
             }
         }
+
         switch (workMode) { 
+        case WORK_MODE::V1FROZEN: {
+            for (const int pid : appInfo.pids) {
+                if (!Utils::writeInt(freeze ? cgroupV1FrozenPath : cgroupV1UnfrozenPath, pid))
+                    freezeit.logFmt("%s [%s PID:%d] 失败(V1FROZEN)",
+                        freeze ? "冻结" : "解冻", appInfo.label.c_str(), pid);
+            }
+        } break;
+        
         case WORK_MODE::V2FROZEN: {
             for (const int pid : appInfo.pids) {
                 if (!Utils::writeInt(freeze ? cgroupV2FrozenPath : cgroupV2UnfrozenPath, pid))
@@ -380,6 +389,7 @@ public:
                 struct stat statBuf {};
                 if (stat(path, &statBuf)) return true;
                 return (uid_t)appInfo.uid != statBuf.st_uid;
+                
                 });
         }
 
@@ -925,15 +935,6 @@ public:
         }
     }
 
-    void getVisibleAppHome() {
-        const char* cmdList = "pm resolve-activity --brief -c android.intent.category.HOME -a android.intent.action.MAIN | grep '/' | cut -f1 -d '/'";
-        char temp [256];
-        VPOPEN::popenRead(cmdList, temp, sizeof(temp));
-        size_t len = strcspn(temp, "\n");  // 找到第一个 \n 的位置 
-        temp[len] = '\0'; 
-        const string& homePackage = temp;
-        managedApp.updateHomePackage(homePackage);
-    }
     // 常规查询前台 只返回第三方, 剔除白名单/桌面
     void getVisibleAppByShell() {
        // START_TIME_COUNT;
@@ -1177,7 +1178,7 @@ public:
                     unFreezerTemporary(uid);
                 }
             }
-            Utils::sleep_ms(1000);
+            Utils::sleep_ms(1200);
         }
     }
 
@@ -1263,6 +1264,8 @@ public:
 
         char buf[TRIGGER_BUF_SIZE];
         while (read(inotifyFd, buf, TRIGGER_BUF_SIZE) > 0) {
+            threadUnFreezeFunc();
+            Utils::sleep_ms(300);
             threadUnFreezeFunc();
         }
 
@@ -1408,10 +1411,12 @@ public:
         if (!settings.enableNkBinder) return 0;
         sleep(10);
         if (settings.enableReKernel || settings.enableBinderFreeze) { freezeit.log("您已开启ReKernel或开启Binder全局冻结 已自动结束与NkBinder的通信"); return 0; }
+        
         int skfd = socket(AF_LOCAL, SOCK_STREAM, 0);
-        int len = 0;
+        int len = sizeof("nkbinder") + offsetof(struct sockaddr_un, sun_path);
         struct sockaddr_un addr;
         char buffer[128];
+
         if (skfd < 0) {
             freezeit.log("与NkBinder握手失败");
             return -1;
@@ -1421,7 +1426,6 @@ public:
         addr.sun_path[0]  = 0;  
         memcpy(addr.sun_path + 1, "nkbinder", sizeof("nkbinder"));
     
-        len = sizeof("nkbinder") + offsetof(struct sockaddr_un, sun_path);
     
         if (connect(skfd, (struct sockaddr*)&addr, len) < 0) {
             freezeit.log("与NkBinder连接失败");
