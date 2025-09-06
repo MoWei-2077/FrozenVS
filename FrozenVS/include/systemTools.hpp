@@ -698,10 +698,7 @@ public:
                         playbackDevicesCnt--;
                 }
             }
-            {
-                std::lock_guard<std::mutex> lock(mtx);
-                isMicrophoneRecording = playbackDevicesCnt > 0;
-            }
+            isMicrophoneRecording = playbackDevicesCnt > 0;
             usleep(500 * 1000);
         }
 

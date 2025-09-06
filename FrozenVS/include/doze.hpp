@@ -121,7 +121,7 @@ private:
 
             // 设备活跃状态
             if (mScreenState == 2 || mScreenState == 5 || mScreenState == 6) {
-                if (settings.enableDoze)
+                if (settings.enableDebug && settings.enableDebug)
                     freezeit.logFmt("亮屏中 mScreenState[%d]", mScreenState);
                 break;
             }
@@ -134,16 +134,13 @@ private:
             }
 
             // 以下则是息屏: 1 3 4
-            // 
             // 认定设备活跃状态
-            {
-                std::lock_guard<std::mutex> lock(mtx);
-                if (systemTools.isMicrophoneRecording) {
-                    if (settings.enableDebug)
-                        freezeit.log("息屏, 播放中");
-                    break;
-                } 
-            }
+            if (systemTools.isMicrophoneRecording) {
+                if (settings.enableDebug)
+                    freezeit.log("息屏, 播放中");
+                break;
+            } 
+            
             // "Unknown", "Charging", "Discharging", "Not charging", "Full"
             // https://cs.android.com/android/kernel/superproject/+/common-android-mainline-kleaf:common/drivers/power/supply/power_supply_sysfs.c;l=75
             char res[64];

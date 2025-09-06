@@ -29,17 +29,18 @@ private:
     vector<thread> threads;
 
     WORK_MODE workMode = WORK_MODE::GLOBAL_SIGSTOP;
-    map<int, int> pendingHandleList;     //挂起列队 无论黑白名单 { uid, timeRemain:sec }
-    set<int> lastForegroundApp;          //前台应用
-    set<int> curForegroundApp;           //新前台应用
-    set<int> curFgBackup;                //新前台应用备份 用于进入doze前备份， 退出后恢复
-    set<int> naughtyApp;                 //冻结期间存在异常解冻或唤醒进程的应用
-    set<int> audioPlayingApp;            //正在音频播放的APP
+    unordered_map<int, int> pendingHandleList;     //挂起列队 无论黑白名单 { uid, timeRemain:sec }
+    unordered_set<int> lastForegroundApp;          //前台应用
+    
+    unordered_set<int> curForegroundApp;           //新前台应用
+    unordered_set<int> curFgBackup;                //新前台应用备份 用于进入doze前备份， 退出后恢复
+    unordered_set<int> naughtyApp;                 //冻结期间存在异常解冻或唤醒进程的应用
+    unordered_set<int> audioPlayingApp;            //正在音频播放的APP
     mutex naughtyMutex;
 
     uint32_t timelineIdx = 0;
     uint32_t unfrozenTimeline[4096] = {};
-    map<int, uint32_t> unfrozenIdx;
+    unordered_map<int, uint32_t> unfrozenIdx;
 
     int refreezeSecRemain = settings.getRefreezeTimeout(); 
     static constexpr size_t GET_VISIBLE_BUF_SIZE = 256 * 1024;
@@ -134,7 +135,6 @@ public:
 
         case WORK_MODE::V2FROZEN: {
             MountFreezerV2();
-            Utils::sleep_ms(10);
             if (checkFreezerV2FROZEN()) {
                 workMode = WORK_MODE::V2FROZEN;
                 freezeit.setWorkMode(getCurWorkModeStr());
@@ -242,15 +242,13 @@ public:
             const int pid = atoi(file->d_name);
 
             if (pid <= 100) continue;
-            size_t size = strlen(file->d_name);
-            memcpy(fullPath + 6, file->d_name, size); // 手动构建字符串
+            memcpy(fullPath + 6, file->d_name, 6);
 
             struct stat statBuf;
             if (stat(fullPath, &statBuf) || !uidSet.contains(statBuf.st_uid))continue;
             const int uid = statBuf.st_uid;
 
-            memcpy(fullPath + 6 + size, "/cmdline", 8);
-            fullPath[14 + size] = '\0';
+            strcat(fullPath + 8, "/cmdline");
             char readBuff[256];
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
 
@@ -287,15 +285,13 @@ public:
             const int pid = atoi(file->d_name);
 
             if (pid <= 100) continue;
-            size_t size = strlen(file->d_name);
-            memcpy(fullPath + 6, file->d_name, size); // 手动构建字符串
+            memcpy(fullPath + 6, file->d_name, 6);
 
             struct stat statBuf;
             if (stat(fullPath, &statBuf) || !uidSet.contains(statBuf.st_uid))continue;
             const int uid = statBuf.st_uid;
 
-            memcpy(fullPath + 6 + size, "/cmdline", 8);
-            fullPath[14 + size] = '\0'; // 手动处理
+            strcat(fullPath + 8, "/cmdline");
 
             char readBuff[256];
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
@@ -384,52 +380,48 @@ public:
         }
         else {
             erase_if(appInfo.pids, [&appInfo](const int pid) {
-                char path[32] = {};
+                char path[32];
                 Utils::FastSnprintf(path, sizeof(path), "/proc/%d", pid);
                 struct stat statBuf {};
                 if (stat(path, &statBuf)) return true;
                 return (uid_t)appInfo.uid != statBuf.st_uid;
-                
                 });
         }
 
-        switch (appInfo.freezeMode) {
-        case FREEZE_MODE::FREEZER: 
-        case FREEZE_MODE::FREEZER_BREAK: {
-            if (workMode != WORK_MODE::GLOBAL_SIGSTOP) {
-                if (settings.enableBinderFreeze) { 
+        if (appInfo.freezeMode  == FREEZE_MODE::TERMINATE) [[unlikely]] { // 分支预测技术
+            if (freeze) 
+                handleSignal(appInfo, SIGKILL);
+            return 0;
+        } else {
+            switch (appInfo.freezeMode) {
+            case FREEZE_MODE::FREEZER: 
+            case FREEZE_MODE::FREEZER_BREAK: {
+                if (workMode == WORK_MODE::GLOBAL_SIGSTOP) break;
+                    if (settings.enableBinderFreeze) { 
+                        const int res = handleBinder(appInfo, freeze);
+                        if (res < 0 && freeze && appInfo.isPermissive) return res;
+                    }
+                    handleFreezer(appInfo, freeze);
+                break;
+            }
+            
+
+            case FREEZE_MODE::SIGNAL:
+            case FREEZE_MODE::SIGNAL_BREAK: {
+                if (settings.enableBinderFreeze) {
                     const int res = handleBinder(appInfo, freeze);
                     if (res < 0 && freeze && appInfo.isPermissive) return res;
                 }
-                handleFreezer(appInfo, freeze);
-                break;
+                handleSignal(appInfo, freeze ? SIGSTOP : SIGCONT);
+            } break;
+
+            default: {
+                freezeit.logFmt("不再冻结此应用：%s %s", appInfo.label.c_str(),
+                    getModeText(appInfo.freezeMode));
+                return 0;
+            }
             }
         }
-        
-
-        case FREEZE_MODE::SIGNAL:
-        case FREEZE_MODE::SIGNAL_BREAK: {
-            if (settings.enableBinderFreeze) {
-                const int res = handleBinder(appInfo, freeze);
-                if (res < 0 && freeze && appInfo.isPermissive) return res;
-            }
-            
-            handleSignal(appInfo, freeze ? SIGSTOP : SIGCONT);
-        } break;
-
-        case FREEZE_MODE::TERMINATE: {
-            if (freeze)
-                handleSignal(appInfo, SIGKILL);
-            return 0;
-        }
-
-        default: {
-            freezeit.logFmt("不再冻结此应用：%s %s", appInfo.label.c_str(),
-                getModeText(appInfo.freezeMode));
-            return 0;
-        }
-        }
-
         if (settings.wakeupTimeoutMin != 120) {
             // 无论冻结还是解冻都要清除 解冻时间线上已设置的uid
             auto it = unfrozenIdx.find(appInfo.uid);
@@ -527,6 +519,7 @@ public:
 	}
 
     void bootFreeze() {
+        sleep(10);
 		DIR* dir = opendir("/proc");
 		if (dir == nullptr) {
 			char errTips[256];
@@ -547,8 +540,7 @@ public:
 
             if (pid <= 100) continue;
 
-            size_t size = strlen(file->d_name);
-            memcpy(fullPath + 6, file->d_name, size); // 手动构建字符串
+            memcpy(fullPath + 6, file->d_name, 6); // 手动构建字符串
 
             struct stat statBuf;
             if (stat(fullPath, &statBuf))continue;
@@ -562,8 +554,7 @@ public:
             if (appInfo.isWhitelist())
                 continue;
 
-            memcpy(fullPath + 6 + size, "/cmdline", 8);
-            fullPath[14 + size] = '\0'; // 手动处理
+            strcat(fullPath + 8, "/cmdline");
 
             char readBuff[256];
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
@@ -645,6 +636,7 @@ public:
 
                 freezeit.log("现已支持 FreezerV2(FROZEN)");
            } 
+           Utils::sleep_ms(10);
         }
     }
 
@@ -800,10 +792,10 @@ public:
             if (!curForegroundApp.contains(uid))
                 toBackgroundApp.emplace_back(uid);
 
-        if (newShowOnApp.empty() && toBackgroundApp.empty())
+        if (newShowOnApp.size() || toBackgroundApp.size())
+            lastForegroundApp = curForegroundApp;
+        else
             return;
-            
-        lastForegroundApp = curForegroundApp;
 
 
         for (const int uid : newShowOnApp) {
@@ -1265,7 +1257,6 @@ public:
         char buf[TRIGGER_BUF_SIZE];
         while (read(inotifyFd, buf, TRIGGER_BUF_SIZE) > 0) {
             threadUnFreezeFunc();
-            Utils::sleep_ms(300);
             threadUnFreezeFunc();
         }
 
@@ -1515,15 +1506,13 @@ public:
             if (pid <= 100) continue;
 
             char fullPath[24] = "/proc/";
-            size_t size = strlen(file->d_name);
-            memcpy(fullPath + 6, file->d_name, size); // 手动构建字符串
+            memcpy(fullPath + 6, file->d_name, 6); 
 
             struct stat statBuf;
             const int uid = statBuf.st_uid;
             if (stat(fullPath, &statBuf) && (!managedApp.contains(uid) || managedApp[uid].isWhitelist()))continue;
 
-            memcpy(fullPath + 6 + size, "/cmdline", 8);
-            fullPath[14 + size] = '\0'; // 手动处理
+            strcat(fullPath + 8, "/cmdline");
 
             char readBuff[256];
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;

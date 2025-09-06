@@ -14,7 +14,7 @@
 #include <set>
 #include <unordered_set>
 #include <map>
-
+#include <unordered_map>
 #include <cstdio>
 #include <cerrno>
 #include <cstring>
@@ -22,6 +22,7 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdlib>
+#include <algorithm> 
 #include <csignal>
 #include <cctype>
 
@@ -55,6 +56,7 @@
 using std::atomic;
 using std::set;
 using std::unordered_set;
+using std::unordered_map;
 using std::map;
 using std::multimap;
 using std::stringstream;
