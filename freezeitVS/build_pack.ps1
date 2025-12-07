@@ -17,7 +17,7 @@ $cppFlags = "-std=c++23 -static -s -O3 -Wall -Wextra -Wshadow -fno-exceptions -f
 
 log "Compiler... ARM64"
 $target = "--target=aarch64-none-linux-android31"
-& $clang $target $sysroot $cppFlags.Split(' ') -Iinclude src/main.cpp -o build/Frozen
+& $clang $target $sysroot $cppFlags.Split(' ') -Iinclude src/main.cpp -o magisk/Frozen
 if (-not$?)
 {
     abort "Compiler ARM64 fail"
