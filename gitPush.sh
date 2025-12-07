@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 
 git add *
-git commit -m "A small update"
+git commit -m ""
 git push -u origin main

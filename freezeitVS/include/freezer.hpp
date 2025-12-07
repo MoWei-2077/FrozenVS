@@ -358,7 +358,6 @@ public:
         } break;
 
         case WORK_MODE::V2UID: {
-            
             for (const int pid : appInfo.pids) {
                 if (V2UIDSpareMode)
                     Utils::FastSnprintf(path, sizeof(path), cgroupV2SpaceUidPidPath, 
@@ -1086,7 +1085,7 @@ public:
                 }
             }
 
-            lastAudioApp = currentAudioApp;
+            lastAudioApp = std::move(currentAudioApp);
             
             Utils::sleep_ms(1000); 
         }
@@ -1251,6 +1250,113 @@ public:
         END_TIME_COUNT;
     }
 
+    // 常规查询前台 只返回第三方, 剔除白名单/桌面
+	void getVisibleAppByShellLRU() {
+		START_TIME_COUNT;
+
+		curForegroundApp.clear();
+		const char* cmdList[] = { "/system/bin/dumpsys", "dumpsys", "activity", "lru", nullptr };
+		VPOPEN::vpopen(cmdList[0], cmdList + 1, getVisibleAppBuff.get(), GET_VISIBLE_BUF_SIZE);
+
+		stringstream ss;
+		ss << getVisibleAppBuff.get();
+
+		// 以下耗时仅 0.08-0.14ms, VPOPEN::vpopen 15-60ms
+		string line;
+		getline(ss, line);
+
+        
+        if (systemTools.SDK_INT_VER >= 29) { //Android 11 Android 12+
+
+			/* SDK 31-32-33
+			OnePlus6:/ # dumpsys activity lru
+			ACTIVITY MANAGER LRU PROCESSES (dumpsys activity lru)
+			  Activities:
+			  #45: cch+ 5 CEM  ---- 5537:com.tencent.mobileqq/u0a212
+			  Other:
+			  #39: svcb   SVC  ---- 19270:com.tencent.mm/u0a221
+
+			generic_x86_64:/ $ getprop ro.build.version.sdk
+			30
+			generic_x86_64:/ $ dumpsys activity lru
+			ACTIVITY MANAGER LRU PROCESSES (dumpsys activity lru)
+			  Activities:
+			  #30: fg     TOP  LCM 995:com.android.launcher3/u0a117 act:activities|recents
+			  Other:
+			  #29: cch+ 5 CEM  --- 801:com.android.permissioncontroller/u0a127
+			  # 6: pers   PER  LCM 1354:com.android.ims.rcsservice/1001
+			  # 5: psvc   PER  LCM 670:com.android.bluetooth/1002
+
+			!!! !!! !!!
+
+			generic_x86_64:/ $ getprop ro.build.version.sdk
+			29
+			generic_x86_64:/ # dumpsys activity lru
+			ACTIVITY MANAGER LRU PROCESSES (dumpsys activity lru)
+			  Activities:
+				#26: fore   TOP  2961:com.android.launcher3/u0a100  activity=activities|recents
+			  Other:
+				#25: cch+ 5 CEM  3433:com.android.dialer/u0a101
+				#24: prev   LAST 3349:android.process.acore/u0a52
+				#23: cch+ 5 CEM  4100:com.android.keychain/1000
+				#9: cch+75 CEM  3551:com.android.managedprovisioning/u0a59
+				#8: prcp   IMPB 2601:com.android.inputmethod.latin/u0a115
+			*/
+			auto getForegroundLevel = [](const char* ptr) {
+				// const char level[][8] = {
+				// // 0, 1,   2顶层,   3, 4常驻状态栏, 5, 6悬浮窗
+				// "PER ", "PERU", "TOP ", "BTOP", "FGS ", "BFGS", "IMPF",
+				// };
+				// for (int i = 2; i < sizeof(level) / sizeof(level[0]); i++) {
+				//   if (!strncmp(ptr, level[i], 4))
+				//     return i;
+				// }
+
+				constexpr uint32_t levelInt[7] = { 0x20524550, 0x55524550, 0x20504f54, 0x504f5442,
+												  0x20534746, 0x53474642, 0x46504d49 };
+				const uint32_t target = *((uint32_t*)ptr);
+				for (int i = 2; i < 7; i++) {
+					if (target == levelInt[i])
+						return i;
+				}
+				return 16;
+			};
+
+			int offset = systemTools.SDK_INT_VER == 29 ? 5 : 3; // 行首 空格加#号 数量
+			auto startStr = systemTools.SDK_INT_VER == 29 ? "    #" : "  #";
+			getline(ss, line);
+			if (!strncmp(line.c_str(), "  Activities:", 4)) {
+				while (getline(ss, line)) {
+					// 此后每行必需以 "  #"、"    #" 开头，否则就是 Service: Other:需跳过
+					if (strncmp(line.c_str(), startStr, offset)) break;
+
+					auto linePtr = line.c_str() + offset; // 偏移已经到数字了
+
+					auto ptr = linePtr + (linePtr[2] == ':' ? 11 : 12); //11: # 1 ~ 99   12: #100+
+					int level = getForegroundLevel(ptr);
+					if (level < 2 || 6 < level) continue;
+
+					ptr = strstr(line.c_str(), "/u0a");
+					if (!ptr)continue;
+					int uid = 10000 + atoi(ptr + 4);
+					if (!managedApp.contains(uid))
+                        continue;
+
+                    auto& appInfo = managedApp[uid];
+
+					if (appInfo.isWhitelist())continue;
+					if ((level <= 3) || appInfo.isPermissive) curForegroundApp.insert(uid);
+
+#if DEBUG_DURATION
+					freezeit.logFmt("Legacy前台 %s:%d", appInfo.label.c_str(), level);
+#endif
+				}
+			}
+		}
+		END_TIME_COUNT;
+	}
+
+    
 
     string getModeText(FREEZE_MODE mode) {
         switch (mode) {
@@ -1308,7 +1414,11 @@ public:
             updateAppProcess();
         }
         else {
-            getVisibleAppByLocalSocket();
+            if (systemTools.SDK_INT_VER >= 31) 
+                getVisibleAppByLocalSocket(); 
+            else 
+                getVisibleAppByShellLRU();
+            
             updateAppProcess(); // ~40us
         }
     }
