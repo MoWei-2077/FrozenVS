@@ -14,14 +14,14 @@ private:
     Freezeit& freezeit;
     Settings& settings;
 
-    static const size_t PACKAGE_LIST_BUF_SIZE = 256 * 1024;
+    static constexpr size_t PACKAGE_LIST_BUF_SIZE = 256 * 1024;
     unique_ptr<char[]> packageListBuff;
 
     string homePackage;
     map<string, int> uidIndex;
     map<int, cfgStruct> cfgTemp;
 
-    const unordered_set<string> whiteListForce{
+    const unordered_set<string_view> whiteListForce {
             "com.xiaomi.mibrain.speech",            // 系统语音引擎
             "com.xiaomi.scanner",                   // 小爱视觉
             "com.xiaomi.xmsf",                      // Push
@@ -409,10 +409,11 @@ private:
             "org.lineageos.setupwizard.auto_generated_rro_product__",
             "org.lineageos.updater.auto_generated_rro_product__",
             "org.protonaosp.deviceconfig.auto_generated_rro_product__",
+            "io.github.MoWei.Frozen",
 
     };
 
-    const unordered_set<string> whiteListDefault{
+    const unordered_set<string_view> whiteListDefault{
         "com.mi.health",                        // 小米运动健康
         "com.tencent.mm.wxa.sce",               // 微信小程序   三星OneUI专用
 
@@ -588,10 +589,12 @@ public:
 
         map<int, string> allAppList, thirdAppList;
 
-        if (!readPackagesListA12(allAppList, thirdAppList)) {
+        if (!readPackagesListA12(allAppList, thirdAppList)) 
             readCmdPackagesAll(allAppList);
-            readCmdPackagesThird(thirdAppList);
-        }
+        else if (!readPackagesListA10_11(allAppList))
+            readCmdPackagesAll(allAppList);
+    
+        readCmdPackagesThird(thirdAppList);
 
         if (allAppList.size() == 0) {
             freezeit.log("没有应用或获取失败");
@@ -613,6 +616,8 @@ public:
                 .uid = uid,
                 .freezeMode = isSYS ? FREEZE_MODE::WHITELIST : FREEZE_MODE::FREEZER,
                 .isPermissive = true,
+                .isFreeze = false,
+                .isAudioPlaying = false,
                 .delayCnt = 0,
                 .timelineUnfrozenIdx = -1,
                 .isSystemApp = isSYS,
@@ -724,18 +729,6 @@ public:
         return false;
     }
 
-    bool isTrustedApp(const char* ptr) {
-        const char* prefix[] = {
-                "com.github.",
-                "io.github.",
-        };
-        for (size_t i = 0; i < sizeof(prefix) / sizeof(prefix[0]); i++) {
-            if (Utils::startWith(prefix[i], ptr))
-                return true;
-        }
-        return false;
-    }
-
     void applyCfgTemp() {
         for (auto& appInfo : appInfoMap) {
             if (appInfo.uid < UID_START)continue;
@@ -755,7 +748,7 @@ public:
         for (auto& appInfo : appInfoMap) {
             if (appInfo.uid < UID_START)continue;
 
-            if (isTrustedApp(appInfo.package.c_str()) || whiteListForce.contains(appInfo.package))
+            if (whiteListForce.contains(appInfo.package))
                 appInfo.freezeMode = FREEZE_MODE::WHITEFORCE;
         }
 
@@ -844,7 +837,7 @@ public:
                 return;
             }
         }
-        freezeit.logFmt("%s() 工作异常, 请确认LSPosed中冻它勾选系统框架, 然后重启 sendLen[%lu]", __FUNCTION__,
+        freezeit.logFmt("%s() 工作异常, 请确认LSPosed中Frozen勾选系统框架, 然后重启 sendLen[%lu]", __FUNCTION__,
             tmp.length());
     }
 

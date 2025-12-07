@@ -24,7 +24,7 @@
 #include <cstdlib>
 #include <csignal>
 #include <cctype>
-
+#include <algorithm>
 #include <fcntl.h>
 #include <unistd.h>
 #include <dirent.h>
@@ -103,7 +103,8 @@ constexpr auto FORK_DOUBLE = 1;
 enum class WORK_MODE : uint32_t {
     V2FROZEN = 0,
     V2UID = 1,
-    GLOBAL_SIGSTOP = 2,
+    V1FROZEN = 2,
+    GLOBAL_SIGSTOP = 3,
 };
 
 enum class FREEZE_MODE : uint32_t {
@@ -117,7 +118,7 @@ enum class FREEZE_MODE : uint32_t {
 };
 
 // 1359322925 是 "Freezeit" 的10进制CRC32值
-const int baseCode = 1359322925;
+constexpr int baseCode = 1668424211;
 
 enum class XPOSED_CMD : uint32_t {
     GET_FOREGROUND = baseCode + 1,
@@ -130,6 +131,8 @@ enum class XPOSED_CMD : uint32_t {
     BREAK_NETWORK = baseCode + 41,
 
     UPDATE_PENDING = baseCode + 60,   // 更新待冻结应用
+    GET_AUDIO = baseCode + 81, // 获取音频信息
+    GET_INTENT = baseCode + 91, // 获取后台意图
 };
 
 enum class REPLY : uint32_t {
@@ -146,7 +149,6 @@ enum class WAKEUP_LOCK : uint32_t {
 enum class MANAGER_CMD : uint32_t {
     // 获取信息 无附加数据 No additional data required
     getPropInfo = 2,     // return string: "ID\nName\nVersion\nVersionCode\nAuthor\nclusterNum"
-    getChangelog = 3,    // return string: "changelog"
     getLog = 4,          // return string: "log"
     getAppCfg = 5,       // return string: "package x\npackage x\n...
     getRealTimeInfo = 6, // return ImgBytes[h*w*4]+String: (rawBitmap + 内存 频率 使用率 电流)
@@ -198,6 +200,8 @@ struct appInfoStruct {
     int uid = -1;
     FREEZE_MODE freezeMode = FREEZE_MODE::FREEZER; // [10]:杀死 [20]:SIGSTOP [30]:freezer [40]:配置 [50]:内置
     bool isPermissive = true;      // 宽容的 有前台服务也算前台
+    bool isFreeze = false;         // 冻结的 
+    bool isAudioPlaying = false;          // 正在播放音频的应用
     int delayCnt = 0;              // Binder冻结失败而延迟次数
     int timelineUnfrozenIdx = -1;  // 解冻时间线索引
     bool isSystemApp = true;       // 是否系统应用
@@ -312,6 +316,76 @@ public:
 
 
 namespace Utils {
+    static char* emit_u32(char *buf, char *end, uint32_t val) {
+        char tmp[11];
+        char *out = tmp + sizeof(tmp);
+    
+        do {
+            *--out = (char)('0' + (val % 10u));
+            val /= 10u;
+        } while (val);
+        const size_t len = (size_t)(tmp + sizeof(tmp) - out);
+    
+        const size_t avail = (end > buf) ? (size_t)(end - buf) : 0;
+        const size_t copy = len < avail ? len : avail;
+    
+        memcpy(buf, out, copy);
+    
+        return buf + copy;
+    }
+
+    static int FastVsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
+        char *p = buf;
+        char *const end = buf + (size ? size : (size_t)-1);
+    
+        while (*fmt) {
+            if (*fmt != '%') {
+                if (p < end) *p = *fmt;
+                ++p; ++fmt;
+                continue;
+            }
+            ++fmt;                          
+            switch (*fmt++) {
+            case 'd': {
+                int v = va_arg(ap, int);
+                if (v < 0) {
+                    if (p < end) *p = '-';
+                    ++p;
+                    v = -v;
+                }
+                p = emit_u32(p, end, (uint32_t)v);
+                break;
+            }
+            case 's': {
+                const char *s = va_arg(ap, const char *);
+                if (!s) s = "(null)";
+                while (*s) {
+                    if (p < end) *p = *s;
+                    ++p; ++s;
+                }
+                break;
+            }
+            case '%':
+                if (p < end) *p = '%';
+                ++p;
+                break;
+            }
+        }
+    
+        if (size) {                       
+            if (p >= end) p = end - 1;
+            *p = '\0';
+        }
+        return (int)(p - buf);              
+    }
+    
+    int FastSnprintf(char* buf, size_t size, const char* fmt, ...) {
+        va_list ap;
+        va_start(ap, fmt);
+        int r = FastVsnprintf(buf, size, fmt, ap);
+        va_end(ap);
+        return r;
+    }
 
     vector<string> splitString(const string& str, const string& delim) {
         if (str.empty()) return {};
@@ -410,6 +484,10 @@ namespace Utils {
         return atoi(buff);
     }
 
+    void sleep_ms(const int ms) {
+        usleep(ms * 1000);
+    }
+
     size_t readString(const char* path, char* buff, const size_t maxLen) {
         auto fd = open(path, O_RDONLY);
         if (fd <= 0) {
@@ -446,7 +524,7 @@ namespace Utils {
         if (fd <= 0) return false;
 
         char tmp[16];
-        auto len = snprintf(tmp, sizeof(tmp), "%d", value);
+        auto len = FastSnprintf(tmp, sizeof(tmp), "%d", value);
         write(fd, tmp, len);
         close(fd);
         return true;
@@ -462,6 +540,49 @@ namespace Utils {
         write(fd, buff, len);
         close(fd);
         return true;
+    }
+
+    void InotifyMain(const char *dir_name, uint32_t mask) {
+        int fd = inotify_init();
+        if (fd < 0) {
+            printf("Failed to initialize inotify.\n");
+            exit(-1);
+        }
+
+        int wd = inotify_add_watch(fd, dir_name, mask);
+        if (wd < 0) {
+            printf("Failed to add watch for directory: %s",dir_name);
+            close(fd);
+            exit(-1);
+        }
+
+        const int buflen = sizeof(struct inotify_event) + NAME_MAX + 1;
+        char buf[buflen];
+        fd_set readfds;
+
+        while (true) {
+            FD_ZERO(&readfds);
+            FD_SET(fd, &readfds);
+
+            int iRet = select(fd + 1, &readfds, nullptr, nullptr, nullptr);
+            if (iRet < 0) {
+                break;
+            }
+
+            int len = read(fd, buf, buflen);
+            if (len < 0) {
+                printf("Failed to read inotify events.\n");
+                break;
+            }
+
+            const struct inotify_event *event = reinterpret_cast<const struct inotify_event *>(buf);
+            if (event->mask & mask) {
+                break;
+            }
+        }
+
+        inotify_rm_watch(fd, wd);
+        close(fd);
     }
 
     char lastChar(char* ptr) {
@@ -506,8 +627,9 @@ namespace Utils {
         // https://blog.csdn.net/howellzhu/article/details/111597734
         // https://blog.csdn.net/shanzhizi/article/details/16882087 一种是路径方式 一种是抽象命名空间
         constexpr int addrLen =
-            offsetof(sockaddr_un, sun_path) + 21; // addrLen大小是 "\0FreezeitXposedServer" 的字符长度
-        constexpr sockaddr_un srv_addr{ AF_UNIX, "\0FreezeitXposedServer" }; // 首位为空[0]=0，位于Linux抽象命名空间
+            offsetof(sockaddr_un, sun_path) + 19; // addrLen大小是 "\0FrozenXposedServer" 的字符长度
+
+        constexpr sockaddr_un srv_addr{ AF_UNIX, "\0FrozenXposedServer" }; // 首位为空[0]=0，位于Linux抽象命名空间
 
         auto fd = socket(AF_UNIX, SOCK_STREAM, 0);
         if (fd < 0)
@@ -537,7 +659,6 @@ namespace Utils {
         return recvLen;
     }
 
-
     void printException(
         const char* versionStr,
         const int exceptionCnt,
@@ -547,7 +668,7 @@ namespace Utils {
         if (bufSize == 0)
             bufSize = strlen(exceptionBuf);
 
-        auto fp = fopen("/sdcard/Android/freezeit_crash_log.txt", "ab");
+        auto fp = fopen("/sdcard/Android/Frozen_crash_log.txt", "ab");
         if (!fp) return;
 
         auto timeStamp = time(nullptr);
@@ -567,12 +688,10 @@ namespace Utils {
 
 
     void Init() {
-        srand(std::chrono::system_clock::now().time_since_epoch().count());
-        usleep(1000 * (rand() & 0x7ff)); //随机休眠 1ms ~ 2s
 
         // 检查是否还有其他freezeit进程，防止进程多开
         char buf[256] = { 0 };
-        if (popenRead("pidof freezeit", buf, sizeof(buf)) == 0) {
+        if (popenRead("pidof Frozen", buf, sizeof(buf)) == 0) {
             printException(nullptr, 0, "进程检测失败");
             exit(-1);
         }
@@ -580,9 +699,9 @@ namespace Utils {
         auto ptr = strchr(buf, ' ');
         if (ptr) { // "pidNum1 pidNum2 ..."  如果存在多个pid就退出
             char tips[256];
-            auto len = snprintf(tips, sizeof(tips),
-                "冻它已经在运行(pid: %s), 当前进程(pid:%d)即将退出，"
-                "请勿手动启动冻它, 也不要在多个框架同时安装冻它模块", buf, getpid());
+            auto len = FastSnprintf(tips, sizeof(tips),
+                "Frozen已经在运行(pid: %s), 当前进程(pid:%d)即将退出，"
+                "请勿手动启动Frozen, 也不要在多个框架同时安装冻它模块", buf, getpid());
             printf("\n!!! \n!!! %s\n!!!\n\n", tips);
             printException(nullptr, 0, tips, len);
             exit(-2);
@@ -644,14 +763,14 @@ namespace Utils {
 
                     if (kill(pid, SIGKILL) < 0) {
                         char tips[128];
-                        auto len = snprintf(tips, sizeof(tips), "杀死 [工作进程 pid:%d] 失败", pid);
+                        auto len = Utils::FastSnprintf(tips, sizeof(tips), "杀死 [工作进程 pid:%d] 失败", pid);
                         printException(versionStr, 0, tips, len);
                     }
 
                     int status = 0;
                     if (waitpid(pid, &status, __WALL) != pid) {
                         char tips[128];
-                        auto len = snprintf(tips, sizeof(tips), "waitpid 异常: [%d] HEX[%s]", status,
+                        auto len = Utils::FastSnprintf(tips, sizeof(tips), "waitpid 异常: [%d] HEX[%s]", status,
                             bin2Hex(&status, 4).c_str());
                         printException(versionStr, 0, tips, len);
                     }
@@ -689,16 +808,22 @@ namespace MAGISK {
     }
 }
 
+namespace APatch {
+	int get_version_code() {
+		const int version = Utils::readInt("/data/adb/ap/version");
+		return version;
+	}
+}
 // https://github.com/tiann/KernelSU/blob/main/manager/app/src/main/cpp/ksu.cc
 namespace KSU {
-    const int CMD_GRANT_ROOT = 0;
-    const int CMD_BECOME_MANAGER = 1;
-    const int CMD_GET_VERSION = 2;
-    const int CMD_ALLOW_SU = 3;
-    const int CMD_DENY_SU = 4;
-    const int CMD_GET_ALLOW_LIST = 5;
-    const int CMD_GET_DENY_LIST = 6;
-    const int CMD_CHECK_SAFEMODE = 9;
+    constexpr int CMD_GRANT_ROOT = 0;
+    constexpr int CMD_BECOME_MANAGER = 1;
+    constexpr int CMD_GET_VERSION = 2;
+    constexpr int CMD_ALLOW_SU = 3;
+    constexpr int CMD_DENY_SU = 4;
+    constexpr int CMD_GET_ALLOW_LIST = 5;
+    constexpr int CMD_GET_DENY_LIST = 6;
+    constexpr int CMD_CHECK_SAFEMODE = 9;
 
     bool ksuctl(int cmd, void* arg1, void* arg2) {
         const uint32_t KERNEL_SU_OPTION{ 0xDEADBEEF };

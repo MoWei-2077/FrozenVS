@@ -69,7 +69,7 @@ private:
             sizeof(buff));
 
         if (recvLen == 0) {
-            freezeit.logFmt("%s() 工作异常, 请确认LSPosed中冻它勾选系统框架, 然后重启", __FUNCTION__);
+            freezeit.logFmt("%s() 工作异常, 请确认LSPosed中Frozen勾选系统框架, 然后重启", __FUNCTION__);
             END_TIME_COUNT;
             return 0;
         }
@@ -110,9 +110,9 @@ private:
             //    mScreenState = getScreenByLocalSocket();
             //else mScreenState = res[0] - '0';
 
-            int mScreenState = systemTools.getScreenProperty();
+            int mScreenState = getScreenByLocalSocket();
             if (mScreenState < 0)
-                mScreenState = getScreenByLocalSocket();
+                mScreenState = systemTools.getScreenProperty();
 
             if (mScreenState != 1 && mScreenState != 2)
                 freezeit.debugFmt("屏幕其他状态 mScreenState[%d]", mScreenState);
@@ -210,7 +210,7 @@ public:
                     deltaTime %= 60;
                 }
                 if (deltaTime) tmp.appendFmt("%d秒", deltaTime);
-                tmp.appendFmt(" 唤醒率 %d%%", activeRate);
+                tmp.appendFmt(" 唤醒率 %d.%d %%", activeRate / 10, activeRate % 10);
                 freezeit.log(string_view(tmp.c_str(), tmp.length));
 
                 struct st {
@@ -249,7 +249,7 @@ public:
     }
 
     bool checkIfNeedToEnter() {
-        constexpr int TIMEOUT = 3 * 60;
+        constexpr int TIMEOUT = 60;  // 60秒后进入doze
         static int secCnt = 30;
 
         if (isScreenOffStandby || ++secCnt < TIMEOUT)
@@ -261,7 +261,7 @@ public:
             return false;
 
         const time_t nowTimeStamp = time(nullptr);
-        if ((nowTimeStamp - lastInteractiveTime) < (TIMEOUT + 60L))
+        if ((nowTimeStamp - lastInteractiveTime) < TIMEOUT)
             return false;
 
         freezeit.debug("息屏状态已超时，正在确认息屏状态");
@@ -278,7 +278,8 @@ public:
 
         if (settings.enableDoze) {
             freezeit.debug("开始准备深度Doze");
-            updateDozeWhitelist();
+            if (settings.enableClearBettryWhllelist) updateDozeWhitelist();
+            
             updateUidTime();
 
             freezeit.log("😴 进入深度Doze");

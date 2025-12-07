@@ -18,8 +18,8 @@ private:
 
     thread serverThread;
 
-    static const int RECV_BUF_SIZE = 2 * 1024 * 1024;  // 2 MiB TCP通信接收缓存大小
-    static const int REPLY_BUF_SIZE = 8 * 1024 * 1024; // 8 MiB TCP通信回应缓存大小
+    static constexpr int RECV_BUF_SIZE = 2 * 1024 * 1024;  // 2 MiB TCP通信接收缓存大小
+    static constexpr int REPLY_BUF_SIZE = 8 * 1024 * 1024; // 8 MiB TCP通信回应缓存大小
     unique_ptr<char[]> recvBuf, replyBuf;
 
 public:
@@ -47,7 +47,7 @@ public:
         /*  LOCAL_SOCKET  *******************************************************************/
 
         constexpr socklen_t addrLen = sizeof(sockaddr);
-        const sockaddr_in serv_addr{ AF_INET, htons(60613), {inet_addr("127.0.0.1")}, {} };
+        const sockaddr_in serv_addr{ AF_INET, htons(60191), {inet_addr("127.0.0.1")}, {} };
 
 
         recvBuf = make_unique<char[]>(RECV_BUF_SIZE);
@@ -194,11 +194,6 @@ public:
                 systemTools.androidVerStr.c_str(), systemTools.kernelVerStr.c_str(), systemTools.extMemorySize);
         } break;
 
-        case MANAGER_CMD::getChangelog: {
-            replyPtr = freezeit.getChangelogPtr();
-            replyLen = freezeit.getChangelogLen();
-        } break;
-
         case MANAGER_CMD::getLog: {
             replyPtr = freezeit.getLogPtr();
             replyLen = freezeit.getLoglen();
@@ -274,8 +269,8 @@ public:
         case MANAGER_CMD::getXpLog: {
             const int len = Utils::localSocketRequest(XPOSED_CMD::GET_XP_LOG, nullptr, 0, (int*)replyBuf.get(), REPLY_BUF_SIZE);
             if (len == 0) {
-                freezeit.log("getXpLog 工作异常, 请确认LSPosed中冻它勾选系统框架, 然后重启");
-                replyPtr = "Freezeit's Xposed log is empty. ";
+                freezeit.log("getXpLog 工作异常, 请确认LSPosed中Frozen勾选系统框架, 然后重启");
+                replyPtr = "Frozen's Xposed log is empty. ";
                 replyLen = 32;
             }
             else {
@@ -322,7 +317,7 @@ public:
             string tips;
             set<int> changeUidSet; // 发生配置变化的应用
             for (const auto& appInfo : managedApp.appInfoMap) {
-                if (appInfo.uid < ManagedApp::UID_START || appInfo.freezeMode == FREEZE_MODE::WHITEFORCE ||
+                if (appInfo.freezeMode == FREEZE_MODE::WHITEFORCE ||
                     !newCfg.contains(appInfo.uid) || appInfo.freezeMode == newCfg[appInfo.uid].freezeMode)
                     continue;
 
@@ -341,7 +336,7 @@ public:
                 }
             }
             if (tips.length())
-                freezeit.logFmt("以下UID的应用不受冻它管理：[%s] 可在冻它配置页搜索UID查看是哪些应用", tips.c_str());
+                freezeit.logFmt("以下UID的应用不受Frozen管理：[%s] 可在Frozen配置页搜索UID查看是哪些应用", tips.c_str());
 
             //auto runningPids = freezer.getRunningPids(changeUidSet);
             //tips.clear();

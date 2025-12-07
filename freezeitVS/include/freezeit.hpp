@@ -5,7 +5,7 @@
 
 class Freezeit {
 private:
-    const char* LOG_PATH = "/sdcard/Android/freezeit.log";
+    static constexpr const char* LOG_PATH = "/sdcard/Android/Frozen.log";
 
     constexpr static int LINE_SIZE = 1024 * 32;   //  32 KiB
     constexpr static int BUFF_SIZE = 1024 * 128;  // 128 KiB
@@ -17,7 +17,6 @@ private:
     char logCache[BUFF_SIZE];
 
     string propPath;
-    string changelog{ "无" };
 
     uint8_t* deBugFlagPtr = nullptr;
 
@@ -122,26 +121,26 @@ public:
                 versionCode = KSU::get_version_code();
             }
         }
+        else if (!access("/data/adb/ap/bin/apd", F_OK)) {
+			moduleEnv = "APatch";
+			versionCode = APatch::get_version_code();
+			if (versionCode <= 0) {
+				sleep(2);
+				versionCode = APatch::get_version_code();
+			}
+		}
         if (versionCode > 0)
             moduleEnv += " (" + to_string(versionCode) + ")";
-
-        auto fp = fopen((modulePath + "/boot.log").c_str(), "rb");
-        if (fp) {
-            auto len = fread(logCache, 1, BUFF_SIZE, fp);
-            if (len > 0)
-                position = len;
-            fclose(fp);
-        }
 
         toFileFlag = argc > 1;
         if (toFileFlag) {
             if (position)toFile(logCache, position);
-            const char tips[] = "日志已通过文件输出: /sdcard/Android/freezeit.log";
+            const char tips[] = "日志已通过文件输出: /sdcard/Android/Frozen.log";
             toMem(tips, sizeof(tips) - 1);
         }
 
         propPath = modulePath + "/module.prop";
-        fp = fopen(propPath.c_str(), "r");
+        auto fp = fopen(propPath.c_str(), "r");
         if (!fp) {
             fprintf(stderr, "找不到模块属性文件 [%s]", propPath.c_str());
             exit(-1);
@@ -166,8 +165,6 @@ public:
         }
         fclose(fp);
 
-
-        changelog = Utils::readString((modulePath + "/changelog.txt").c_str());
 
 
         logFmt("模块版本 %s(%s)", prop["version"].c_str(), prop["versionCode"].c_str());
@@ -209,17 +206,13 @@ public:
         return *deBugFlagPtr;
     }
 
-    char* getChangelogPtr() { return (char*)changelog.c_str(); }
-
-    size_t getChangelogLen() { return changelog.length(); }
-
     bool saveProp() {
         auto fp = fopen(propPath.c_str(), "wb");
         if (!fp)
             return false;
 
         char tmp[1024];
-        size_t len = snprintf(tmp, sizeof(tmp),
+        size_t len = Utils::FastSnprintf(tmp, sizeof(tmp),
             "id=%s\nname=%s\nversion=%s\nversionCode=%s\nauthor=%s\ndescription=%s\nupdateJson=%s\n",
             prop["id"].c_str(), prop["name"].c_str(), prop["version"].c_str(),
             prop["versionCode"].c_str(),
@@ -334,7 +327,7 @@ public:
 
         const int prefixLen = formatTimeDebug();
 
-        int len = snprintf(lineCache + prefixLen, (size_t)(LINE_SIZE - prefixLen), fmt, std::forward<Args>(args)...) + prefixLen;
+        int len = Utils::FastSnprintf(lineCache + prefixLen, (size_t)(LINE_SIZE - prefixLen), fmt, std::forward<Args>(args)...) + prefixLen;
 
         if (len <= 13 || LINE_SIZE <= (len + 1)) {
             lineCache[13] = 0;

@@ -191,7 +191,7 @@ com.cainiao.wireless####菜鸟
 com.jingdong.app.mall####京东
 com.sankuai.meituan####美团
 com.taou.maimai####脉脉
-com.omarea.vtools####Scene5
+com.omarea.vtools####Scene
 com.valvesoftware.android.steam.community####Steam
 com.microsoft.office.officelens####Lens
 make.more.r2d2.cellular_z####CellularZ
@@ -256,4 +256,4 @@ com.mediatek.duraspeed####快霸
 com.android.uwb.resources####System UWB Resources
 com.android.adservices.api####Android AdServices
 com.android.safetycenter.resources####安全中心资源
-io.github.jark006.freezeit####冻它
+io.github.MoWei.Frozen####Frozen
