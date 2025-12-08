@@ -862,9 +862,11 @@ public:
             if (!curForegroundApp.contains(uid))
                 toBackgroundApp.emplace_back(uid);
 
-        if (newShowOnApp.empty() || toBackgroundApp.empty()) return
+        if (!newShowOnApp.empty() || !toBackgroundApp.empty())
            // lastForegroundApp = curForegroundApp;
             lastForegroundApp.swap(curForegroundApp);
+        else 
+            return;
 
         for (const int uid : newShowOnApp) {
             // 如果在待冻结列表则只需移除
@@ -1036,7 +1038,7 @@ public:
         constexpr int waitSeconds = 6;
         while (true) {
 
-            int buff[64];  
+            int buff[64] = {};  
 
             int recvLen = Utils::localSocketRequest(XPOSED_CMD::GET_AUDIO, nullptr, 0, buff, 
                 sizeof(buff));
@@ -1097,7 +1099,7 @@ public:
         sleep(3); 
 
         while (true) {
-            int buff[128];
+            int buff[128] = {};
 
             int recvLen = Utils::localSocketRequest(XPOSED_CMD::GET_INTENT, nullptr, 0, buff, 
                 sizeof(buff));
@@ -1218,7 +1220,7 @@ public:
         int recvLen = Utils::localSocketRequest(XPOSED_CMD::GET_FOREGROUND, nullptr, 0, buff,
             sizeof(buff));
 
-        int UidLen = buff[0];
+        int& UidLen = buff[0];
         if (recvLen <= 0) {
             freezeit.logFmt("%s() 工作异常, 请确认LSPosed中Frozen勾选系统框架, 然后重启", __FUNCTION__);
             END_TIME_COUNT;
@@ -1233,8 +1235,8 @@ public:
 
         curForegroundApp.clear();
         for (int i = 1; i <= UidLen; i++) {
-            int uid = buff[i];
-            if (managedApp.contains(uid) && managedApp[uid].isWhitelist()) curForegroundApp.insert(uid);
+            int& uid = buff[i];
+            if (managedApp.contains(uid)) curForegroundApp.insert(uid);
             else freezeit.logFmt("非法UID[%d], 可能是新安装的应用, 请点击右上角第一个按钮更新应用列表", uid);
         }
 
@@ -1558,7 +1560,7 @@ public:
         struct sockaddr_un addr;
         char buffer[128];
 
-        constexpr const char* name = "nkbinder";
+        constexpr const char name[] = "nkbinder";
         if (skfd < 0) {
             freezeit.log("连接Bind失败");
             return -1;
@@ -1566,7 +1568,7 @@ public:
     
         addr.sun_family  = AF_LOCAL;
         addr.sun_path[0]  = 0;  
-        memcpy(addr.sun_path + 1, name, sizeof("nkbinder"));
+        memcpy(addr.sun_path + 1, name, sizeof(name));
     
         len = sizeof(name) + offsetof(struct sockaddr_un, sun_path);
     
