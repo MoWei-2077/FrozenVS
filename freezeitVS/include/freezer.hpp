@@ -862,10 +862,9 @@ public:
             if (!curForegroundApp.contains(uid))
                 toBackgroundApp.emplace_back(uid);
 
-        if (!newShowOnApp.empty() || !toBackgroundApp.empty())
-            lastForegroundApp = curForegroundApp;
-        else
-            return;
+        if (newShowOnApp.empty() || toBackgroundApp.empty()) return
+           // lastForegroundApp = curForegroundApp;
+            lastForegroundApp.swap(curForegroundApp);
 
         for (const int uid : newShowOnApp) {
             // 如果在待冻结列表则只需移除
@@ -881,6 +880,8 @@ public:
             const int num = handleProcess(appInfo, false);
             if (num > 0) freezeit.logFmt("☀️解冻 %s %d进程", appInfo.label.c_str(), num);
             else freezeit.logFmt("😁启动 %s", appInfo.label.c_str());
+            
+            appInfo.isFreeze = false;
         }
 
         for (const int uid : toBackgroundApp) { // 更新倒计时
@@ -1064,7 +1065,6 @@ public:
             for (int i = 0; i < uidCount; ++i) {
                 int uid = buff[i];
 
-
                 if (!managedApp.contains(uid))
                     continue;
                 
@@ -1218,7 +1218,7 @@ public:
         int recvLen = Utils::localSocketRequest(XPOSED_CMD::GET_FOREGROUND, nullptr, 0, buff,
             sizeof(buff));
 
-        int& UidLen = buff[0];
+        int UidLen = buff[0];
         if (recvLen <= 0) {
             freezeit.logFmt("%s() 工作异常, 请确认LSPosed中Frozen勾选系统框架, 然后重启", __FUNCTION__);
             END_TIME_COUNT;
@@ -1233,8 +1233,8 @@ public:
 
         curForegroundApp.clear();
         for (int i = 1; i <= UidLen; i++) {
-            int& uid = buff[i];
-            if (managedApp.contains(uid)) curForegroundApp.insert(uid);
+            int uid = buff[i];
+            if (managedApp.contains(uid) && managedApp[uid].isWhitelist()) curForegroundApp.insert(uid);
             else freezeit.logFmt("非法UID[%d], 可能是新安装的应用, 请点击右上角第一个按钮更新应用列表", uid);
         }
 
@@ -1424,10 +1424,11 @@ public:
     }
 
     void ThreadsThawFunc() {
+       // constexpr int REMAIN_TIMES_MAX = 2;
+      //  int count = 0;
         while (true) {
             Utils::InotifyMain(cpusetEventPath, IN_ALL_EVENTS);
-            Utils::sleep_ms(100);
-            ThawFunction();
+            ThawFunction(); 
             Utils::sleep_ms(250);
             ThawFunction();
         }
@@ -1435,6 +1436,8 @@ public:
 
     // Binder事件 需要额外magisk模块: ReKernel
     int binderEventTriggerTask(void) {
+        sleep(2); // 这里已经通知ReKernel清理了 uint 节点 不加会造成会ReKernel和NkBinder同时握手
+
         int skfd, ret;
         user_msg_info u_info;
         socklen_t len;
@@ -1549,8 +1552,6 @@ public:
 
     int NkBinderMagiskFunc(void) {
         if (!settings.enableunFreezerTemporary || checkReKernel()) return -1;
-
-        sleep(2);
 
         int skfd = socket(AF_LOCAL, SOCK_STREAM, 0);
         int len;
