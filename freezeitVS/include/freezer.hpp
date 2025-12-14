@@ -47,6 +47,8 @@ private:
 
     int refreezeSecRemain = 10; //开机 一分钟时 就压一次
 
+    int remainTimesToRefreshTopApp = 2;
+    
     bool V2UIDSpareMode = false; // V2UID备用模式
 
     static constexpr const size_t GET_VISIBLE_BUF_SIZE = 256 * 1024;
@@ -99,13 +101,13 @@ public:
 
         binderInit("/dev/binder");
 
-        threads.emplace_back(thread(&Freezer::ThreadsThawFunc, this));        // 监控前台    
+        threads.emplace_back(thread(&Freezer::cpuSetTriggerTask, this));      // 监控前台    
         threads.emplace_back(thread(&Freezer::bootFreeze, this));             // 开机冻结    
         threads.emplace_back(thread(&Freezer::NkBinderMagiskFunc, this));     // NkBinder
         threads.emplace_back(thread(&Freezer::getAudioByLocalSocket, this));  // 监听音频播放 
         threads.emplace_back(thread(&Freezer::handlePendingIntent, this));    // 后台意图
         threads.emplace_back(thread(&Freezer::binderEventTriggerTask, this)); // binder事件
-        threads.emplace_back(thread(&Freezer::cycleThreadFunc, this));
+        threads.emplace_back(thread(&Freezer::cycleThreadFunc, this));                                                                                                                                
 
         checkAndMountV2();
         switch (static_cast<WORK_MODE>(settings.setMode)) {
@@ -460,25 +462,30 @@ public:
             }
         }
 
-        if (freeze && appInfo.needBreakNetwork()) {
-            const auto ret = systemTools.breakNetworkByLocalSocket(appInfo.uid);
-            switch (static_cast<REPLY>(ret)) {
-            case REPLY::SUCCESS:
-                freezeit.logFmt("断网成功: %s", appInfo.label.c_str());
-                break;
-            case REPLY::FAILURE:
-                freezeit.logFmt("断网失败: %s", appInfo.label.c_str());
-                break;
-            default:
-                freezeit.logFmt("断网 未知回应[%d] %s", ret, appInfo.label.c_str());
-                break;
-            }
-        }
-
+        
+        if (freeze && appInfo.needBreakNetwork()) 
+            BreakNetWork(appInfo);
+        else if(freeze && settings.enableBreakNetWork) 
+            BreakNetWork(appInfo);
+        
         END_TIME_COUNT;
         return appInfo.pids.size();
     }
 
+    void BreakNetWork(appInfoStruct& appInfo) {
+        const auto ret = systemTools.breakNetworkByLocalSocket(appInfo.uid);
+        switch (static_cast<REPLY>(ret)) {
+        case REPLY::SUCCESS:
+            freezeit.logFmt("断网成功: %s", appInfo.label.c_str());
+            break;
+        case REPLY::FAILURE:
+            freezeit.logFmt("断网失败: %s", appInfo.label.c_str());
+            break;
+        default:
+            freezeit.logFmt("断网 未知回应[%d] %s", ret, appInfo.label.c_str());
+            break;
+        }
+    }
 
     // 重新压制第三方。 白名单, 前台, 待冻结列队 都跳过
     void bootFreeze() {
@@ -1411,29 +1418,60 @@ public:
 
 
     void ThawFunction() {
-        if (doze.isScreenOffStandby && doze.checkIfNeedToExit()) {
-            curForegroundApp = std::move(curFgBackup);
-            updateAppProcess();
-        }
-        else {
-            if (systemTools.SDK_INT_VER >= 31) 
-                getVisibleAppByLocalSocket(); 
-            else 
-                getVisibleAppByShellLRU();
-            
-            updateAppProcess(); // ~40us
+        if (remainTimesToRefreshTopApp-- > 0) {
+            if (doze.isScreenOffStandby) {
+                if (doze.checkIfNeedToExit()) {
+                    curForegroundApp = std::move(curFgBackup);
+                    updateAppProcess();
+                }
+            }
+            else {
+                if (systemTools.SDK_INT_VER >= 31) 
+                    getVisibleAppByLocalSocket(); 
+                else 
+                    getVisibleAppByShellLRU();
+                
+                updateAppProcess(); // ~40us
+            }
         }
     }
 
-    void ThreadsThawFunc() {
-       // constexpr int REMAIN_TIMES_MAX = 2;
-      //  int count = 0;
-        while (true) {
-            Utils::InotifyMain(cpusetEventPath, IN_ALL_EVENTS);
-            ThawFunction(); 
-            Utils::sleep_ms(250);
-            ThawFunction();
+    void cpuSetTriggerTask() {
+        constexpr int TRIGGER_BUF_SIZE = 8192;
+
+        sleep(1);
+
+        int inotifyFd = inotify_init();
+        if (inotifyFd < 0) {
+            fprintf(stderr, "同步事件: 0xB1 (1/3)失败: [%d]:[%s]", errno, strerror(errno));
+            exit(-1);
         }
+
+        //int watch_d = inotify_add_watch(inotifyFd,
+        //    systemTools.SDK_INT_VER >= 33 ? cpusetEventPathA13
+        //    : cpusetEventPathA12,
+        //    IN_ALL_EVENTS);
+
+        int watch_d = inotify_add_watch(inotifyFd, cpusetEventPath, IN_ALL_EVENTS);
+
+        if (watch_d < 0) {
+            fprintf(stderr, "同步事件: 0xB1 (2/3)失败: [%d]:[%s]", errno, strerror(errno));
+            exit(-1);
+        }
+
+        freezeit.log("初始化同步事件: 0xB1");
+
+        constexpr int REMAIN_TIMES_MAX = 2;
+        char buf[TRIGGER_BUF_SIZE];
+        while (read(inotifyFd, buf, TRIGGER_BUF_SIZE) > 0) {
+            remainTimesToRefreshTopApp = REMAIN_TIMES_MAX;
+            usleep(200 * 1000);
+        }
+
+        inotify_rm_watch(inotifyFd, watch_d);
+        close(inotifyFd);
+
+        freezeit.log("已退出监控同步事件: 0xB0");
     }
 
     // Binder事件 需要额外magisk模块: ReKernel
@@ -1605,12 +1643,30 @@ public:
     }
 
     void cycleThreadFunc() { 
+        uint32_t halfSecondCnt{ 0 };
+
         sleep(1);
         getVisibleAppByShell(); // 获取桌面
 
         while (true) {
 
-            sleep(1);
+            usleep(200 * 1000);
+
+            if (remainTimesToRefreshTopApp-- > 0) {
+                START_TIME_COUNT;
+                if (doze.isScreenOffStandby && doze.checkIfNeedToExit()) {
+                    curForegroundApp = std::move(curFgBackup); // recovery
+                    updateAppProcess();
+                    //setWakeupLockByLocalSocket(WAKEUP_LOCK::DEFAULT);//TODO xposed端改为一律禁止
+                }
+                else if (!doze.isScreenOffStandby) {
+                    getVisibleAppByLocalSocket();
+                    updateAppProcess(); // ~40us
+                }
+                END_TIME_COUNT;
+            }
+
+            if (++halfSecondCnt % 5 != 0) continue;
 
             systemTools.cycleCnt++;
 

@@ -33,15 +33,15 @@ private:
             0,  //[18] 内存回收
             0,  //[19] 清理电池白名单
             1,  //[20] 临时解冻
-            0,  //[21]
-            0,  //[22]
-            0,  //[13]
+            1,  //[21] 全局断网
+            0,  //[22] 调整 lmk 参数
+            0,  //[23] 深度Doze
             0,  //[24]
             0,  //[25]
             0,  //[26]
             0,  //[27]
-            1,  //[28] 调整 lmk 参数
-            1,  //[29] 深度Doze
+            1,  //[28] 
+            1,  //[29] 
             0,  //[30] Doze调试日志
             0,  //[31]
             0,  //[32]
@@ -77,8 +77,9 @@ public:
     uint8_t& enableMemoryReclaim = settingsVar[18];           // 内存回收
     uint8_t& enableClearBettryWhllelist = settingsVar[19];    // 清理电池白名单
     uint8_t& enableunFreezerTemporary = settingsVar[20];      // 临时解冻
-    uint8_t& enableLMK = settingsVar[21];                     // 后台优化
-    uint8_t& enableDoze = settingsVar[22];                    // 深度Doze
+    uint8_t& enableBreakNetWork = settingsVar[21];            // 全局断网
+    uint8_t& enableLMK = settingsVar[22];                     // 后台优化
+    uint8_t& enableDoze = settingsVar[23];                    // 深度Doze
 
     uint8_t& enableDebug = settingsVar[30];                   // 调试日志
 
@@ -236,9 +237,9 @@ public:
         case 18: // 内存回收
         case 19: // 清理电池白名单
         case 20: // 临时解冻
-        case 21: // 后台优化
-        case 22: // doze
-        case 23: //
+        case 21: // 全局断网
+        case 22: // 后台优化
+        case 23: // doze
         case 24: //
         case 25: //
         case 26: //
