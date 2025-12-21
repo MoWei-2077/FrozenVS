@@ -70,8 +70,8 @@ public:
         freezeit(freezeit), settings(settings) {
 
         char tmp[1024];
-        ANDROID_VER = __system_property_get("ro.build.version.release", tmp) > 0 ? atoi(tmp) : 0;
-        SDK_INT_VER = __system_property_get("ro.build.version.sdk", tmp) > 0 ? atoi(tmp) : 0;
+        ANDROID_VER = __system_property_get("ro.build.version.release", tmp) > 0 ? Fastatoi(tmp) : 0;
+        SDK_INT_VER = __system_property_get("ro.build.version.sdk", tmp) > 0 ? Fastatoi(tmp) : 0;
         androidVerStr = to_string(ANDROID_VER) + " (API " + to_string(SDK_INT_VER) + ")";
 
         freezeit.logFmt("安卓版本 %s", androidVerStr.c_str());
@@ -286,14 +286,14 @@ public:
         // 主板温度 /sys/class/thermal/thermal_message/board_sensor_temp
         for (int i = 0; i < 32; i++) {
             char path[256];
-            snprintf(path, sizeof(path), "/sys/class/thermal/thermal_zone%d/type", i);
+            FastSnprintf(path, sizeof(path), "/sys/class/thermal/thermal_zone%d/type", i);
 
             char type[64] = {};
             Utils::readString(path, type, sizeof(type));
 
             if (!strncmp(type, "soc_max", 6) || !strncmp(type, "mtktscpu", 8) ||
                 !strncmp(type, "cpu", 3)) {
-                snprintf(cpuTempPath, sizeof(path), "/sys/class/thermal/thermal_zone%d/temp", i);
+                FastSnprintf(cpuTempPath, sizeof(path), "/sys/class/thermal/thermal_zone%d/temp", i);
                 break;
             }
         }
@@ -412,7 +412,7 @@ public:
             stackString<128> tips("当前离线核心 ");
             char tmp[64];
             for (int i = 0; i < cpuCoreTotal; i++) {
-                snprintf(tmp, sizeof(tmp), "/sys/devices/system/cpu/cpu%d/online", i);
+                FastSnprintf(tmp, sizeof(tmp), "/sys/devices/system/cpu/cpu%d/online", i);
                 auto fd = open(tmp, O_RDONLY);
                 if (fd < 0)continue;
                 read(fd, tmp, 1);
@@ -420,7 +420,7 @@ public:
                 if (tmp[0] == '0')
                     tips.append('[').append(i).append(']');
             }
-            freezeit.log(string_view(tips.c_str(), tips.length));
+            freezeit.log(tips.c_str(), tips.length);
         }
         if (cpuCoreTotal > 32) {
             cpuCoreTotal = 32;
@@ -440,7 +440,7 @@ public:
             stackString<256> tmp("核心频率");
             for (const auto& [freq, cnt] : res)
                 tmp.appendFmt(" %.2fGHz*%d", freq / (freq > 1e8 ? 1e9 : 1e6), cnt);
-            freezeit.log(string_view(tmp.c_str(), tmp.length));
+            freezeit.log(tmp.c_str(), tmp.length);
         }
         else {
             freezeit.logFmt("核心频率获取失败 cpuCluster %d size %d", cpuCluster, res.size());
@@ -707,12 +707,15 @@ public:
     int breakNetworkByLocalSocket(const int uid) {
         START_TIME_COUNT;
 
-        int buff[64];
-        const int recvLen = Utils::localSocketRequest(XPOSED_CMD::BREAK_NETWORK, &uid, 4, buff,
+        int buff[64] = {};
+
+        buff[0] = uid;
+        
+        const int recvLen = Utils::localSocketRequest(XPOSED_CMD::BREAK_NETWORK, buff, sizeof(int), buff,
             sizeof(buff));
 
         if (recvLen == 0) {
-            freezeit.logFmt("%s() 工作异常, 请确认LSPosed中冻它勾选系统框架, 然后重启", __FUNCTION__);
+            freezeit.logFmt("%s() 工作异常, 请确认LSPosed中Frozen勾选系统框架, 然后重启", __FUNCTION__);
             END_TIME_COUNT;
             return 0;
         }
@@ -767,7 +770,7 @@ public:
             exit(-1);
         }
 
-        freezeit.log("初始化同步事件: 0xC0");
+        freezeit.log("监听音频播放事件成功");
 
         int playbackDevicesCnt = 0;
         ssize_t readLen;

@@ -166,7 +166,6 @@ public:
         fclose(fp);
 
 
-
         logFmt("模块版本 %s(%s)", prop["version"].c_str(), prop["versionCode"].c_str());
         logFmt("编译时间 %s %s UTC+8", compilerDate, __TIME__);
 
@@ -262,13 +261,30 @@ public:
         return 17;
     }
 
-    void log(const string_view& str) {
+    void log(const char* str) {
         lock_guard<mutex> lock(logPrintMutex);
 
         const int prefixLen = formatTimePrefix();
 
-        int len = str.length() + prefixLen;
-        memcpy(lineCache + prefixLen, str.data(), str.length());
+        int strlen = Faststrlen(str);
+        int len = strlen + prefixLen;
+        memcpy(lineCache + prefixLen, str, strlen);
+
+        lineCache[len++] = '\n';
+
+        if (toFileFlag)
+            toFile(lineCache, len);
+        else
+            toMem(lineCache, len);
+    }
+
+    void log(const char* str, size_t strlen) {
+        lock_guard<mutex> lock(logPrintMutex);
+
+        const int prefixLen = formatTimePrefix();
+
+        int len = strlen + prefixLen;
+        memcpy(lineCache + prefixLen, str, strlen);
 
         lineCache[len++] = '\n';
 

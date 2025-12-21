@@ -41,7 +41,6 @@ struct vpopenStruct {
 extern char **environ;
 
 namespace VPOPEN {
-
     int popen_noshell_reopen_fd_to_dev_null(int fd, posix_spawn_file_actions_t *file_actions) {
         if (posix_spawn_file_actions_addclose(file_actions, fd) != 0) return -1;
         if (posix_spawn_file_actions_addopen(file_actions, fd, "/dev/null", O_RDWR, 0600) < 0)

@@ -21,6 +21,7 @@ private:
     map<string, int> uidIndex;
     map<int, cfgStruct> cfgTemp;
 
+
     const unordered_set<string_view> whiteListForce {
             "com.xiaomi.mibrain.speech",            // 系统语音引擎
             "com.xiaomi.scanner",                   // 小爱视觉
@@ -31,7 +32,6 @@ private:
             "com xiaomi.aireco",                    // 小爱建议
             "com.xiaomi.account",                   // 小米账号
             "com.miui.notes",                       // 笔记  冻结会导致系统侧边栏卡住
-            "com.miui.calculator",                  // 计算器
             "com.miui.compass",                     // 指南针
             "com.miui.mediaeditor",                 // 相册编辑
             "com.miui.personalassistant",           // 个人助理
@@ -241,7 +241,6 @@ private:
             "com.android.server.telecom.overlay.miui", // 通话管理
             "com.android.settings.intelligence", // 设置建议
             "com.android.simappdialog", // Sim App Dialog
-            "com.android.soundrecorder", // 录音机
             "com.android.statementservice", // 意图过滤器验证服务
             "com.android.storagemanager", // 存储空间管理器
             "com.android.theme.font.notoserifsource", // Noto Serif / Source Sans Pro
@@ -553,7 +552,7 @@ public:
             if (!Utils::startWith("package:", line.c_str()))continue;
             auto idx = line.find(" uid:");
             if (idx == string::npos)continue;
-            int uid = atoi(line.c_str() + idx + 5);
+            int uid = Fastatoi(line.c_str() + idx + 5);
 
             if (idx < 10 || uid < UID_START || UID_END <= uid) continue;
             _allAppList[uid] = line.substr(8, idx - 8); //package
@@ -575,7 +574,7 @@ public:
             if (!Utils::startWith("package:", line.c_str()))continue;
             auto idx = line.find(" uid:");
             if (idx == string::npos)continue;
-            int uid = atoi(line.c_str() + idx + 5);
+            int uid = Fastatoi(line.c_str() + idx + 5);
 
             if (idx < 10 || uid < UID_START || UID_END <= uid) continue;
             _thirdAppList[uid] = line.substr(8, idx - 8); //package
@@ -663,7 +662,7 @@ public:
 
             int uid;
             if (isdigit(value[0][0])) {
-                uid = atoi(value[0].c_str());
+                uid = Fastatoi(value[0].c_str());
             }
             else {
                 auto it = uidIndex.find(value[0]);
@@ -671,13 +670,13 @@ public:
                 uid = it->second;
             }
 
-            const FREEZE_MODE freezeMode = static_cast<FREEZE_MODE>(atoi(value[1].c_str()));
+            const FREEZE_MODE freezeMode = static_cast<FREEZE_MODE>(Fastatoi(value[1].c_str()));
             if (!FREEZE_MODE_SET.contains(freezeMode)) {
                 freezeit.logFmt("C配置错误: [%s]", line.c_str());
                 continue;
             }
 
-            const bool isPermissive = atoi(value[2].c_str()) != 0;
+            const bool isPermissive = Fastatoi(value[2].c_str()) != 0;
             cfgTemp[uid] = { freezeMode, isPermissive };
         }
         file.close();

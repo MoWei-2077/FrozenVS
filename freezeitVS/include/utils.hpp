@@ -50,6 +50,9 @@
 #include <sys/prctl.h>
 #include <sys/mount.h>
 #include <sys/system_properties.h>
+#include "LibUtils.hpp"
+
+using namespace LibUtils;
 
 using std::set;
 using std::unordered_set;
@@ -126,7 +129,7 @@ enum class XPOSED_CMD : uint32_t {
     GET_XP_LOG = baseCode + 3,
 
     SET_CONFIG = baseCode + 20,
-    SET_WAKEUP_LOCK = baseCode + 21,
+    SET_STANDBY = baseCode + 21,
 
     BREAK_NETWORK = baseCode + 41,
 
@@ -140,9 +143,9 @@ enum class REPLY : uint32_t {
     FAILURE = 0, // 失败
 };
 
-enum class WAKEUP_LOCK : uint32_t {
-    IGNORE = 1,
-    DEFAULT = 3,
+enum class STANDBY : uint32_t {
+    RARE = 1,
+    ACTIVE = 3,
 };
 
 
@@ -281,7 +284,7 @@ public:
     }
 
     stackString& append(const char* s) {
-        return append(s, strlen(s));
+        return append(s, Faststrlen(s));
     }
 
     stackString& append(const char c) {
@@ -531,7 +534,7 @@ namespace Utils {
     }
 
     bool writeString(const char* path, const char* buff, size_t len = 0) {
-        if (len == 0)len = strlen(buff);
+        if (len == 0)len = Faststrlen(buff);
         if (len == 0)return true;
 
         auto fd = open(path, O_WRONLY | O_TRUNC | O_CREAT, 0666);
@@ -666,7 +669,7 @@ namespace Utils {
         size_t bufSize = 0) {
 
         if (bufSize == 0)
-            bufSize = strlen(exceptionBuf);
+            bufSize = Faststrlen(exceptionBuf);
 
         auto fp = fopen("/sdcard/Android/Frozen_crash_log.txt", "ab");
         if (!fp) return;
@@ -701,7 +704,7 @@ namespace Utils {
             char tips[256];
             auto len = FastSnprintf(tips, sizeof(tips),
                 "Frozen已经在运行(pid: %s), 当前进程(pid:%d)即将退出，"
-                "请勿手动启动Frozen, 也不要在多个框架同时安装冻它模块", buf, getpid());
+                "请勿手动启动Frozen, 也不要在多个框架同时安装Frozen模块", buf, getpid());
             printf("\n!!! \n!!! %s\n!!!\n\n", tips);
             printException(nullptr, 0, tips, len);
             exit(-2);
@@ -804,7 +807,7 @@ namespace MAGISK {
     int get_version_code() {
         char buff[32] = { 0 };
         Utils::popenRead("/system/bin/magisk -V", buff, sizeof(buff));
-        return isdigit(buff[0]) ? atoi(buff) : -1;
+        return isdigit(buff[0]) ? Fastatoi(buff) : -1;
     }
 }
 

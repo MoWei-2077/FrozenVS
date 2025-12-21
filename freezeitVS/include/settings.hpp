@@ -162,7 +162,7 @@ public:
 
     size_t size() {
         return SETTINGS_SIZE;
-    }
+    }       
 
     bool isRefreezeEnable() const {
         return 0 < refreezeTimeoutIdx && refreezeTimeoutIdx <= refreezeTimeoutIdxMax;

@@ -289,7 +289,7 @@ public:
                 replyPtr = replyBuf.get();
                 replyLen = snprintf(replyBuf.get(), 128, "需要12字节的倍数, 实际收到 %d 字节",
                     recvLen);
-                freezeit.log(string_view(replyBuf.get(), replyLen));
+                freezeit.log(replyBuf.get(), replyLen);
                 break;
             }
 
@@ -378,7 +378,7 @@ public:
             map<int, string> labelList;
             for (const string& str : Utils::splitString(string(recvBuf.get(), recvLen),
                 "\n")) {
-                const int uid = atoi(str.c_str());
+                const int uid = Fastatoi(str.c_str());
                 if (!managedApp.contains(uid) || str.length() <= 6)
                     freezeit.logFmt("解析名称错误 [%s]", str.c_str());
                 else labelList[uid] = str.substr(6);
@@ -400,6 +400,7 @@ public:
             replyPtr = "success";
             replyLen = 7;
         } break;
+
 
         case MANAGER_CMD::clearLog: {
             freezeit.clearLog();

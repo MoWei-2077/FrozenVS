@@ -17,6 +17,7 @@ private:
     uint32_t enterDozeCycleStamp = 0;
     time_t lastInteractiveTime = time(nullptr); // 上次检查为 亮屏或充电 的时间戳
 
+
     void updateDozeWhitelist() {
         START_TIME_COUNT;
 
@@ -40,7 +41,7 @@ private:
             if (line.length() < 10)continue;
             if (line[line.length() - 6] != ',')continue;
 
-            int uid = atoi(line.c_str() + line.length() - 5);
+            int uid = Fastatoi(line.c_str() + line.length() - 5);
             if (!managedApp.contains(uid))continue;
 
             auto& appInfo = managedApp[uid];
@@ -211,7 +212,7 @@ public:
                 }
                 if (deltaTime) tmp.appendFmt("%d秒", deltaTime);
                 tmp.appendFmt(" 唤醒率 %d.%d %%", activeRate / 10, activeRate % 10);
-                freezeit.log(string_view(tmp.c_str(), tmp.length));
+                freezeit.log(tmp.c_str(), tmp.length);
 
                 struct st {
                     int uid;
