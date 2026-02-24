@@ -47,7 +47,7 @@ public:
         /*  LOCAL_SOCKET  *******************************************************************/
 
         constexpr socklen_t addrLen = sizeof(sockaddr);
-        const sockaddr_in serv_addr{ AF_INET, htons(60613), {inet_addr("127.0.0.1")}, {} };
+        const sockaddr_in serv_addr{ AF_INET, htons(60191), {inet_addr("127.0.0.1")}, {} };
 
 
         recvBuf = make_unique<char[]>(RECV_BUF_SIZE);

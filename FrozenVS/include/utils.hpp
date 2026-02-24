@@ -119,8 +119,8 @@ enum class FREEZE_MODE : uint32_t {
     WHITEFORCE = 50,
 };
 
-// 1359322925 是 "Freezeit" 的10进制CRC32值
-const int baseCode = 1359322925;
+// 1668424211 是 "Frozen" 的10进制CRC32值
+constexpr int baseCode = 1668424211;
 
 enum class XPOSED_CMD : uint32_t {
     GET_FOREGROUND = baseCode + 1,
@@ -605,7 +605,6 @@ namespace Utils {
         umask(0);
         chdir("/");
 
-        // signal(SIGCHLD, SIG_IGN);//屏蔽SIGCHLD信号 通知内核对子进程的结束不关心，由内核回收
         int fd_response[2];
         pipe(fd_response);
 
