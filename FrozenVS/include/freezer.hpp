@@ -9,7 +9,6 @@
 
 
 #define PACKET_SIZE      128
-//#define NETLINK_TEST     26
 #define NETLINK_TEST     22  // 需要读取 /proc/rekernel/
 #define USER_PORT        100
 #define MAX_PLOAD        125
@@ -724,13 +723,11 @@ public:
 
             if (naughtyApp.size()) {
                 stateStr.append("\n 发现 [未冻结状态] 的进程, 即将临时解冻\n");
-                refreezeSecRemain = 0;
+                // 后面加入到冻结名单中 强制冻结
             }
 
             stateStr.appendFmt("\n总计 %d 应用 %d 进程, 占用内存 ", (int)uidSet.size(), (int)pidSet.size());
             stateStr.appendFmt("%.2f GiB", totalMiB / 1024.0);
-            //if (getSignalCnt)
-            //    stateStr.append(", V2*带星号状态为get_signal，小概率非冻结状态");
 
             freezeit.log(string_view(stateStr.c_str(), stateStr.length));
         }

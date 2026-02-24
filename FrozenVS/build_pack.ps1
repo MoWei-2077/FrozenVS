@@ -13,14 +13,23 @@ $ndkPath = "C:/AndroidNDK/toolchains/llvm/prebuilt/windows-x86_64"
 $clang = "$ndkPath/bin/clang++.exe"
 $sysroot = "--sysroot=$ndkPath/sysroot"
 $cppFlags = "-std=c++23 -static -s -O3 -Wall -Wextra -Wshadow -fno-exceptions -fno-rtti -DNDEBUG -fPIE"
+$zipFile = "./magisk/magisk.zip"
 
-
-log "构建中..."
+log "编译中..."
 $target = "--target=aarch64-none-linux-android29"
 & $clang $target $sysroot $cppFlags.Split(' ') -Iinclude src/main.cpp -o magisk/Frozen
 if (-not$?)
 {
-    abort "构建失败"
+    abort "编译失败"
 }
 
-log "构建完成"
+log "编译完成"
+
+log "打包中...  $zipFile"
+& ./7za.exe a "$zipFile" ./magisk/* | Out-Null
+if (-not$?)
+{
+    abort "打包失败"
+}
+log "打包完成"
+log "Everything OK"
