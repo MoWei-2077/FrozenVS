@@ -832,7 +832,7 @@ public:
                 return;
             }
         }
-        freezeit.logFmt("%s() 工作异常, 请确认LSPosed中冻它勾选系统框架, 然后重启 sendLen[%lu]", __FUNCTION__,
+        freezeit.logFmt("%s() 工作异常, 请确认LSPosed中Frozen勾选系统框架, 然后重启 sendLen[%lu]", __FUNCTION__,
             tmp.length());
     }
 

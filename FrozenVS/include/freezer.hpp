@@ -939,7 +939,7 @@ public:
             uidCnt * sizeof(int), buff, sizeof(buff));
 
         if (recvLen == 0) {
-            freezeit.logFmt("%s() 工作异常, 请确认LSPosed中冻它勾选系统框架, 然后重启", __FUNCTION__);
+            freezeit.logFmt("%s() 工作异常, 请确认LSPosed中Frozen勾选系统框架, 然后重启", __FUNCTION__);
             END_TIME_COUNT;
             return;
         }
@@ -1040,7 +1040,7 @@ public:
 
         int& UidLen = buff[0];
         if (recvLen <= 0) {
-            freezeit.logFmt("%s() 工作异常, 请确认LSPosed中冻它勾选系统框架, 然后重启", __FUNCTION__);
+            freezeit.logFmt("%s() 工作异常, 请确认LSPosed中Frozen勾选系统框架, 然后重启", __FUNCTION__);
             END_TIME_COUNT;
             return;
         }
@@ -1178,15 +1178,7 @@ public:
 
         struct nlmsghdr* nlh = (struct nlmsghdr*)malloc(NLMSG_SPACE(MAX_PLOAD));
 
-        int failCnt = 0;
         while (true) {
-            if (++failCnt > 100) {
-                auto tips = "ReKernel 工作异常次数超100次，将退出binder事件监听";
-                freezeit.log(tips);
-                fprintf(stderr, "%s", tips);
-                break;
-            }
-
             skfd = socket(AF_NETLINK, SOCK_DGRAM, NETLINK_TEST);
             if (skfd == -1) {
                 freezeit.log("ReKernel AF_NETLINK 创建失败");
@@ -1371,7 +1363,7 @@ public:
             i * sizeof(int), buff, sizeof(buff));
 
         if (recvLen == 0) {
-            freezeit.logFmt("%s() 工作异常, 请确认LSPosed中冻它勾选系统框架, 然后重启", __FUNCTION__);
+            freezeit.logFmt("%s() 工作异常, 请确认LSPosed中Frozen勾选系统框架, 然后重启", __FUNCTION__);
             END_TIME_COUNT;
             return 0;
         }

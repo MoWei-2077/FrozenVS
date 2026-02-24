@@ -5,7 +5,7 @@
 
 class Freezeit {
 private:
-    const char* LOG_PATH = "/sdcard/Android/freezeit.log";
+    static constexpr const char* LOG_PATH = "/sdcard/Android/Frozen.log";
 
     constexpr static int LINE_SIZE = 1024 * 32;   //  32 KiB
     constexpr static int BUFF_SIZE = 1024 * 128;  // 128 KiB
@@ -17,7 +17,6 @@ private:
     char logCache[BUFF_SIZE];
 
     string propPath;
-    string changelog{ "无" };
 
     uint8_t* deBugFlagPtr = nullptr;
 
@@ -125,23 +124,16 @@ public:
         if (versionCode > 0)
             moduleEnv += " (" + to_string(versionCode) + ")";
 
-        auto fp = fopen((modulePath + "/boot.log").c_str(), "rb");
-        if (fp) {
-            auto len = fread(logCache, 1, BUFF_SIZE, fp);
-            if (len > 0)
-                position = len;
-            fclose(fp);
-        }
-
         toFileFlag = argc > 1;
         if (toFileFlag) {
             if (position)toFile(logCache, position);
-            const char tips[] = "日志已通过文件输出: /sdcard/Android/freezeit.log";
+            constexpr const char tips[] = "日志已通过文件输出: /sdcard/Android/Frozen.log";
             toMem(tips, sizeof(tips) - 1);
         }
 
         propPath = modulePath + "/module.prop";
-        fp = fopen(propPath.c_str(), "r");
+        
+        auto fp = fopen(propPath.c_str(), "r");
         if (!fp) {
             fprintf(stderr, "找不到模块属性文件 [%s]", propPath.c_str());
             exit(-1);
@@ -165,10 +157,6 @@ public:
             prop[string(tmp)] = string(ptr + 1);
         }
         fclose(fp);
-
-
-        changelog = Utils::readString((modulePath + "/changelog.txt").c_str());
-
 
         logFmt("模块版本 %s(%s)", prop["version"].c_str(), prop["versionCode"].c_str());
         logFmt("编译时间 %s %s UTC+8", compilerDate, __TIME__);
@@ -209,24 +197,20 @@ public:
         return *deBugFlagPtr;
     }
 
-    char* getChangelogPtr() { return (char*)changelog.c_str(); }
-
-    size_t getChangelogLen() { return changelog.length(); }
-
     bool saveProp() {
         auto fp = fopen(propPath.c_str(), "wb");
         if (!fp)
             return false;
 
         char tmp[1024];
-        size_t len = snprintf(tmp, sizeof(tmp),
+        const size_t len = snprintf(tmp, sizeof(tmp),
             "id=%s\nname=%s\nversion=%s\nversionCode=%s\nauthor=%s\ndescription=%s\nupdateJson=%s\n",
             prop["id"].c_str(), prop["name"].c_str(), prop["version"].c_str(),
             prop["versionCode"].c_str(),
             prop["author"].c_str(), prop["description"].c_str(),
             prop["updateJson"].c_str());
 
-        size_t writeLen = fwrite(tmp, 1, len, fp);
+        const size_t writeLen = fwrite(tmp, 1, len, fp);
         fclose(fp);
 
         return (writeLen == len);
@@ -359,7 +343,7 @@ public:
         return logCache;
     }
 
-    size_t getLoglen() {
+    size_t getLoglen() const {
         return position;
     }
 };

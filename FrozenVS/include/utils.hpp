@@ -149,7 +149,6 @@ enum class WAKEUP_LOCK : uint32_t {
 enum class MANAGER_CMD : uint32_t {
     // 获取信息 无附加数据 No additional data required
     getPropInfo = 2,     // return string: "ID\nName\nVersion\nVersionCode\nAuthor\nclusterNum"
-    getChangelog = 3,    // return string: "changelog"
     getLog = 4,          // return string: "log"
     getAppCfg = 5,       // return string: "package x\npackage x\n...
     getRealTimeInfo = 6, // return ImgBytes[h*w*4]+String: (rawBitmap + 内存 频率 使用率 电流)
