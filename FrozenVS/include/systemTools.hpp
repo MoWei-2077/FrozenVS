@@ -738,17 +738,17 @@ public:
         //     "IN_MOVE_SELF"
         // };
 
-        sleep(4);
+        sleep(2);
 
         char buf[SND_BUF_SIZE];
 
-        int inotifyFd = inotify_init();
+        const int inotifyFd = inotify_init();
         if (inotifyFd < 0) {
             fprintf(stderr, "同步事件: 0xC0 (1/2)失败 [%d]:[%s]", errno, strerror(errno));
             exit(-1);
         }
 
-        int watch_d = inotify_add_watch(inotifyFd, sndPath,
+        const int watch_d = inotify_add_watch(inotifyFd, sndPath,
             IN_OPEN | IN_CLOSE_WRITE | IN_CLOSE_NOWRITE);
         if (watch_d < 0) {
             fprintf(stderr, "同步事件: 0xC0 (2/2)失败 [%d]:[%s]", errno, strerror(errno));
@@ -758,7 +758,7 @@ public:
         freezeit.log("初始化同步事件: 0xC0");
 
         int playbackDevicesCnt = 0;
-        ssize_t readLen;
+        ssize_t readLen = 0;
 
         while ((readLen = read(inotifyFd, buf, SND_BUF_SIZE)) > 0) {
             int readCnt{ 0 };

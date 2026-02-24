@@ -414,25 +414,27 @@ public:
             }
         }
 
-        if (freeze && appInfo.needBreakNetwork()) {
-            const auto ret = systemTools.breakNetworkByLocalSocket(appInfo.uid);
-            switch (static_cast<REPLY>(ret)) {
-            case REPLY::SUCCESS:
-                freezeit.logFmt("断网成功: %s", appInfo.label.c_str());
-                break;
-            case REPLY::FAILURE:
-                freezeit.logFmt("断网失败: %s", appInfo.label.c_str());
-                break;
-            default:
-                freezeit.logFmt("断网 未知回应[%d] %s", ret, appInfo.label.c_str());
-                break;
-            }
-        }
+        if (freeze && appInfo.needBreakNetwork()) 
+            breakNetWork(appInfo);
 
         END_TIME_COUNT;
         return appInfo.pids.size();
     }
 
+    void breakNetWork(appInfoStruct& appInfo) {
+        const auto ret = systemTools.breakNetworkByLocalSocket(appInfo.uid);
+        switch (static_cast<REPLY>(ret)) {
+        case REPLY::SUCCESS:
+            freezeit.logFmt("断网成功: %s", appInfo.label.c_str());
+            break;
+        case REPLY::FAILURE:
+            freezeit.logFmt("断网失败: %s", appInfo.label.c_str());
+            break;
+        default:
+            freezeit.logFmt("断网 未知回应[%d] %s", ret, appInfo.label.c_str());
+            break;
+        }
+    }
 
     // 重新压制第三方。 白名单, 前台, 待冻结列队 都跳过
     void checkReFreezeBackup() {
@@ -1128,9 +1130,7 @@ public:
     void cpuSetTriggerTask() {
         constexpr int TRIGGER_BUF_SIZE = 8192;
 
-        sleep(1);
-
-        int inotifyFd = inotify_init();
+        const int inotifyFd = inotify_init();
         if (inotifyFd < 0) {
             fprintf(stderr, "同步事件: 0xB1 (1/3)失败: [%d]:[%s]", errno, strerror(errno));
             exit(-1);
@@ -1141,7 +1141,7 @@ public:
         //    : cpusetEventPathA12,
         //    IN_ALL_EVENTS);
 
-        int watch_d = inotify_add_watch(inotifyFd, cpusetEventPath, IN_ALL_EVENTS);
+        const int watch_d = inotify_add_watch(inotifyFd, cpusetEventPath, IN_ALL_EVENTS);
 
         if (watch_d < 0) {
             fprintf(stderr, "同步事件: 0xB1 (2/3)失败: [%d]:[%s]", errno, strerror(errno));
@@ -1165,12 +1165,11 @@ public:
 
     // Binder事件 需要额外magisk模块: ReKernel
     void binderEventTriggerTask() {
-        int skfd;
-        int ret;
+        int skfd, ret;
         user_msg_info u_info{};
         socklen_t len;
         struct sockaddr_nl saddr {}, daddr{};
-        auto umsg = "Hello! Re:Kernel!";
+        constexpr const char umsg[] = "Hello! Re:Kernel!";
 
         if (access("/proc/rekernel/22", F_OK)) {
             freezeit.log("ReKernel未安装: /proc/rekernel/22");
@@ -1219,7 +1218,7 @@ public:
             nlh->nlmsg_seq = 0;
             nlh->nlmsg_pid = saddr.nl_pid;
 
-            memcpy(NLMSG_DATA(nlh), umsg, strlen(umsg));
+            memcpy(NLMSG_DATA(nlh), umsg, sizeof(umsg) - 1);
             //freezeit.logFmt("Send msg to kernel:%s", umsg);
 
             ret = sendto(skfd, nlh, nlh->nlmsg_len, 0, (struct sockaddr*)&daddr, sizeof(struct sockaddr_nl));
