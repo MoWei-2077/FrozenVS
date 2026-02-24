@@ -6,9 +6,7 @@
 #include "doze.hpp"
 #include "freezeit.hpp"
 #include "systemTools.hpp"
-#include <linux/netlink.h>
-#include <netinet/tcp.h>
-#include <sys/socket.h>
+
 
 #define PACKET_SIZE      128
 //#define NETLINK_TEST     26
@@ -166,21 +164,20 @@ public:
 
         struct dirent* file;
         while ((file = readdir(dir)) != nullptr) {
-            if (file->d_type != DT_DIR) continue;
-            if (file->d_name[0] < '0' || file->d_name[0] > '9') continue;
+            if (file->d_type != DT_DIR || file->d_name[0] < '0' || file->d_name[0] > '9') continue;
 
             const int pid = atoi(file->d_name);
             if (pid <= 100) continue;
-
-            char fullPath[64];
-            memcpy(fullPath, "/proc/", 6);
-            memcpy(fullPath + 6, file->d_name, 6);
+            
+            const size_t len = strlen(file->d_name);
+            char fullPath[64] = "/proc/";
+            memcpy(fullPath + 6, file->d_name, len);
 
             struct stat statBuf;
-            if (stat(fullPath, &statBuf))continue;
-            if (statBuf.st_uid != (uid_t)appInfo.uid) continue;
+            if (stat(fullPath, &statBuf) || statBuf.st_uid != (uid_t)appInfo.uid)continue;
 
-            strcat(fullPath + 8, "/cmdline");
+            memcpy(fullPath + len + 6, "/cmdline", 9);
+
             char readBuff[256];
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
             const string& package = appInfo.package;
@@ -221,22 +218,21 @@ public:
 
         struct dirent* file;
         while ((file = readdir(dir)) != nullptr) {
-            if (file->d_type != DT_DIR) continue;
-            if (file->d_name[0] < '0' || file->d_name[0] > '9') continue;
+            if (file->d_type != DT_DIR || file->d_name[0] < '0' || file->d_name[0] > '9') continue;
 
             const int pid = atoi(file->d_name);
             if (pid <= 100) continue;
 
-            char fullPath[64];
-            memcpy(fullPath, "/proc/", 6);
-            memcpy(fullPath + 6, file->d_name, 6);
+            const size_t len = strlen(file->d_name);
+            char fullPath[64] = "/proc/";
+            memcpy(fullPath + 6, file->d_name, len);
 
             struct stat statBuf;
             if (stat(fullPath, &statBuf))continue;
             const int uid = statBuf.st_uid;
             if (!uidSet.contains(uid))continue;
 
-            strcat(fullPath + 8, "/cmdline");
+            memcpy(fullPath + len + 6, "/cmdline", 9);
             char readBuff[256];
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
             const string& package = managedApp[uid].package;
@@ -267,22 +263,21 @@ public:
 
         struct dirent* file;
         while ((file = readdir(dir)) != nullptr) {
-            if (file->d_type != DT_DIR) continue;
-            if (file->d_name[0] < '0' || file->d_name[0] > '9') continue;
+            if (file->d_type != DT_DIR || file->d_name[0] < '0' || file->d_name[0] > '9') continue;
 
             const int pid = atoi(file->d_name);
             if (pid <= 100) continue;
 
-            char fullPath[64];
-            memcpy(fullPath, "/proc/", 6);
-            memcpy(fullPath + 6, file->d_name, 6);
+            const size_t len = strlen(file->d_name);
+            char fullPath[64] = "/proc/";
+            memcpy(fullPath + 6, file->d_name, len);
 
             struct stat statBuf;
             if (stat(fullPath, &statBuf))continue;
             const int uid = statBuf.st_uid;
             if (!uidSet.contains(uid))continue;
 
-            strcat(fullPath + 8, "/cmdline");
+            memcpy(fullPath + len + 6, "/cmdline", 9);
             char readBuff[256];
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
             const string& package = managedApp[uid].package;
@@ -465,15 +460,14 @@ public:
 
             struct dirent* file;
             while ((file = readdir(dir)) != nullptr) {
-                if (file->d_type != DT_DIR) continue;
-                if (file->d_name[0] < '0' || file->d_name[0] > '9') continue;
+                if (file->d_type != DT_DIR || file->d_name[0] < '0' || file->d_name[0] > '9') continue;
 
                 const int pid = atoi(file->d_name);
                 if (pid <= 100) continue;
 
-                char fullPath[64];
-                memcpy(fullPath, "/proc/", 6);
-                memcpy(fullPath + 6, file->d_name, 6);
+                const size_t len = strlen(file->d_name);
+                char fullPath[64] = "/proc/";
+                memcpy(fullPath + 6, file->d_name, len);
 
                 struct stat statBuf;
                 if (stat(fullPath, &statBuf))continue;
@@ -485,7 +479,7 @@ public:
                 if (appInfo.isWhitelist())
                     continue;
 
-                strcat(fullPath + 8, "/cmdline");
+                memcpy(fullPath + len + 6, "/cmdline", 9);
                 char readBuff[256];
                 if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
                 const auto& package = appInfo.package;
@@ -493,8 +487,8 @@ public:
                 const char endChar = readBuff[package.length()]; // 特例 com.android.chrome_zygote 无法binder冻结
                 if (endChar != ':' && endChar != 0)continue;
 
-                memcpy(fullPath + 6, file->d_name, 6);
-                strcat(fullPath + 8, "/wchan");
+                memcpy(fullPath + 6, file->d_name, len);
+                memcpy(fullPath + len + 6, "/wchan", 7);
                 if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
                 if (strcmp(readBuff, v2wchan) && strcmp(readBuff, v1wchan) && strcmp(readBuff, SIGSTOPwchan) && 
                     strcmp(readBuff, v2xwchan) && strcmp(readBuff, pStopwchan)) {
@@ -543,15 +537,14 @@ public:
 
             struct dirent* file;
             while ((file = readdir(dir)) != nullptr) {
-                if (file->d_type != DT_DIR) continue;
-                if (file->d_name[0] < '0' || file->d_name[0] > '9') continue;
+                if (file->d_type != DT_DIR || file->d_name[0] < '0' || file->d_name[0] > '9') continue;
 
                 const int pid = atoi(file->d_name);
                 if (pid <= 100) continue;
 
-                char fullPath[64];
-                memcpy(fullPath, "/proc/", 6);
-                memcpy(fullPath + 6, file->d_name, 6);
+                const size_t len = strlen(file->d_name);
+                char fullPath[64] = "/proc/";
+                memcpy(fullPath + 6, file->d_name, len);
 
                 struct stat statBuf;
                 if (stat(fullPath, &statBuf))continue;
@@ -563,7 +556,7 @@ public:
                 if (appInfo.isWhitelist())
                     continue;
 
-                strcat(fullPath + 8, "/cmdline");
+                memcpy(fullPath + len + 6, "/cmdline", 9);
                 char readBuff[256];
                 if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
                 const auto& package = appInfo.package;
@@ -571,8 +564,8 @@ public:
                 const char endChar = readBuff[package.length()]; // 特例 com.android.chrome_zygote 无法binder冻结
                 if (endChar != ':' && endChar != 0)continue;
 
-                memcpy(fullPath + 6, file->d_name, 6);
-                strcat(fullPath + 8, "/wchan");
+                memcpy(fullPath + 6, file->d_name, len);
+                memcpy(fullPath + len + 6, "/wchan", 7);
                 if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
                 if (strcmp(readBuff, v2wchan) && strcmp(readBuff, v1wchan) && strcmp(readBuff, SIGSTOPwchan) &&
                     strcmp(readBuff, v2xwchan) && strcmp(readBuff, pStopwchan)) {
@@ -682,15 +675,14 @@ public:
 
         struct dirent* file;
         while ((file = readdir(dir)) != nullptr) {
-            if (file->d_type != DT_DIR) continue;
-            if (file->d_name[0] < '0' || file->d_name[0] > '9') continue;
+            if (file->d_type != DT_DIR || file->d_name[0] < '0' || file->d_name[0] > '9') continue;
 
             const int pid = atoi(file->d_name);
             if (pid <= 100) continue;
 
-            char fullPath[64];
-            memcpy(fullPath, "/proc/", 6);
-            memcpy(fullPath + 6, file->d_name, 6);
+            const size_t len = strlen(file->d_name);
+            char fullPath[64] = "/proc/";
+            memcpy(fullPath + 6, file->d_name, len);
 
             struct stat statBuf;
             if (stat(fullPath, &statBuf))continue;
@@ -700,7 +692,7 @@ public:
             auto& appInfo = managedApp[uid];
             if (appInfo.isWhitelist()) continue;
 
-            strcat(fullPath + 8, "/cmdline");
+            memcpy(fullPath + len + 6, "/cmdline", 9);
             char readBuff[256]; // now is cmdline Content
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
             const auto& package = appInfo.package;
@@ -715,8 +707,8 @@ public:
             if (readBuff[appInfo.package.length()] == ':')
                 label.append(readBuff + appInfo.package.length());
 
-            memcpy(fullPath + 6, file->d_name, 6);
-            strcat(fullPath + 8, "/statm");
+            memcpy(fullPath + 6, file->d_name, len);
+            memcpy(fullPath + len + 6, "/statm", 7);
             Utils::readString(fullPath, readBuff, sizeof(readBuff)); // now is statm content
             const char* ptr = strchr(readBuff, ' ');
 
@@ -738,8 +730,8 @@ public:
                 continue;
             }
 
-            memcpy(fullPath + 6, file->d_name, 6);
-            strcat(fullPath + 8, "/wchan");
+            memcpy(fullPath + 6, file->d_name, len);
+            memcpy(fullPath + len + 6, "/wchan", 7);
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0) {
                 uidSet.erase(uid);
                 pidSet.erase(pid);
@@ -1345,15 +1337,14 @@ public:
 
         struct dirent* file;
         while ((file = readdir(dir)) != nullptr) {
-            if (file->d_type != DT_DIR) continue;
-            if (file->d_name[0] < '0' || file->d_name[0] > '9') continue;
+            if (file->d_type != DT_DIR || file->d_name[0] < '0' || file->d_name[0] > '9') continue;
 
             const int pid = atoi(file->d_name);
             if (pid <= 100) continue;
 
-            char fullPath[64];
-            memcpy(fullPath, "/proc/", 6);
-            memcpy(fullPath + 6, file->d_name, 6);
+            const size_t len = Faststrlen(file->d_name);
+            char fullPath[64] = "/proc/";
+            memcpy(fullPath + 6, file->d_name, len);
 
             struct stat statBuf;
             if (stat(fullPath, &statBuf))continue;
@@ -1361,7 +1352,7 @@ public:
             if (!managedApp.contains(uid) || managedApp[uid].isWhitelist())
                 continue;
 
-            strcat(fullPath + 8, "/cmdline");
+            memcpy(fullPath + len + 6, "/cmdline", 9);
             char readBuff[256];
             if (Utils::readString(fullPath, readBuff, sizeof(readBuff)) == 0)continue;
             const auto& package = managedApp[uid].package;

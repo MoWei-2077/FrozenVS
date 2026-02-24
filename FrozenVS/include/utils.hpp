@@ -34,6 +34,8 @@
 #include <netinet/in.h>
 #include <linux/input.h>
 #include <linux/android/binder.h>
+#include <linux/netlink.h>
+#include <netinet/tcp.h>
 
 #include <sys/un.h>
 #include <sys/select.h>
