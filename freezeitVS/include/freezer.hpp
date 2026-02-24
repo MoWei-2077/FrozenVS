@@ -32,7 +32,7 @@ private:
     vector<thread> threads;
 
     WORK_MODE workMode = WORK_MODE::GLOBAL_SIGSTOP;
-    map<int, int> pendingHandleList;               //挂起列队 无论黑白名单 { uid, timeRemain:sec }
+    unordered_map<int, int> pendingHandleList;               //挂起列队 无论黑白名单 { uid, timeRemain:sec }
     unordered_set<int> lastForegroundApp;          //前台应用
     unordered_set<int> curForegroundApp;           //新前台应用
     unordered_set<int> curFgBackup;                //新前台应用备份 用于进入doze前备份， 退出后恢复
@@ -46,7 +46,7 @@ private:
     uint32_t unfrozenTimeline[4096] = {};
 
     int refreezeSecRemain = 10; //开机 一分钟时 就压一次
-    
+    int remainTimesToRefreshTopApp = 2;
     bool V2UIDSpareMode = false; // V2UID备用模式
 
     static constexpr const size_t GET_VISIBLE_BUF_SIZE = 256 * 1024;
@@ -73,19 +73,19 @@ private:
     // 备用路径 支持 system/app 区分
     static constexpr const char* cgroupV2SpaceUidPidPath = "/sys/fs/cgroup/%s/uid_%d/pid_%d/cgroup.freeze";
     // /sys/fs/cgroup/system/uid_%d/pid_%d/cgroup.freeze
-    // /sys/fs/cgroup/app/uid_%d/pid_%d/cgroup.freeze
+    // /sys/fs/cgroup/apps/uid_%d/pid_%d/cgroup.freeze
     static constexpr const char* cgroupV2SystemUidPidPath = "/sys/fs/cgroup/system/uid_0/cgroup.freeze";
 
 
-    static constexpr const char v2wchan[16] = "do_freezer_trap";      // FreezerV2冻结状态
-    static constexpr const char v1wchan[16] = "__refrigerator";       // FreezerV1冻结状态
-    static constexpr const char SIGSTOPwchan[16] = "do_signal_stop";  // SIGSTOP冻结状态
-    static constexpr const char v2xwchan[16] = "get_signal";          // FreezerV2冻结状态 内联状态
-    static constexpr const char pStopwchan[16] = "ptrace_stop";       // ptrace冻结状态
-    static constexpr const char epoll_wait1_wchan[16] = "SyS_epoll_wait";
-    static constexpr const char epoll_wait2_wchan[16] = "do_epoll_wait";
-    static constexpr const char binder_wchan[32] = "binder_ioctl_write_read";
-    static constexpr const char pipe_wchan[16] = "pipe_wait";
+    static constexpr const char v2wchan[] = "do_freezer_trap";      // FreezerV2冻结状态
+    static constexpr const char v1wchan[] = "__refrigerator";       // FreezerV1冻结状态
+    static constexpr const char SIGSTOPwchan[] = "do_signal_stop";  // SIGSTOP冻结状态
+    static constexpr const char v2xwchan[] = "get_signal";          // FreezerV2冻结状态 内联状态
+    static constexpr const char pStopwchan[] = "ptrace_stop";       // ptrace冻结状态
+    static constexpr const char epoll_wait1_wchan[] = "SyS_epoll_wait";
+    static constexpr const char epoll_wait2_wchan[] = "do_epoll_wait";
+    static constexpr const char binder_wchan[] = "binder_ioctl_write_read";
+    static constexpr const char pipe_wchan[] = "pipe_wait";
 
 public:
     Freezer& operator=(Freezer&&) = delete;
@@ -101,9 +101,11 @@ public:
 
         threads.emplace_back(thread(&Freezer::cpuSetTriggerTask, this));      // 监控前台     
         threads.emplace_back(thread(&Freezer::bootFreeze, this));             // 开机冻结    
-        threads.emplace_back(thread(&Freezer::NkBinderMagiskFunc, this));     // NkBinder
-        threads.emplace_back(thread(&Freezer::getAudioByLocalSocket, this));  // 监听音频播放 
-        threads.emplace_back(thread(&Freezer::handlePendingIntent, this));    // 后台意图
+        threads.emplace_back(thread(&Freezer::ThawFunction, this));           // 多线程解冻    
+        
+    //    threads.emplace_back(thread(&Freezer::NkBinderMagiskFunc, this));     // NkBinder
+    //    threads.emplace_back(thread(&Freezer::getAudioByLocalSocket, this));  // 监听音频播放 
+    //    threads.emplace_back(thread(&Freezer::handlePendingIntent, this));    // 后台意图
         threads.emplace_back(thread(&Freezer::binderEventTriggerTask, this)); // binder事件
         threads.emplace_back(thread(&Freezer::cycleThreadFunc, this));                                                                                                                                
 
@@ -177,7 +179,7 @@ public:
         DIR* dir = opendir("/proc");
         if (dir == nullptr) {
             char errTips[256];
-            Utils::FastSnprintf(errTips, sizeof(errTips), "错误: %s() [%d]:[%s]", __FUNCTION__, errno,
+            FastSnprintf(errTips, sizeof(errTips), "错误: %s() [%d]:[%s]", __FUNCTION__, errno,
                 strerror(errno));
             fprintf(stderr, "%s", errTips);
             freezeit.log(errTips);
@@ -237,7 +239,7 @@ public:
         DIR* dir = opendir("/proc");
         if (dir == nullptr) {
             char errTips[256];
-            Utils::FastSnprintf(errTips, sizeof(errTips), "错误: %s() [%d]:[%s]", __FUNCTION__, errno,
+            FastSnprintf(errTips, sizeof(errTips), "错误: %s() [%d]:[%s]", __FUNCTION__, errno,
                 strerror(errno));
             fprintf(stderr, "%s", errTips);
             freezeit.log(errTips);
@@ -283,7 +285,7 @@ public:
         DIR* dir = opendir("/proc");
         if (dir == nullptr) {
             char errTips[256];
-            Utils::FastSnprintf(errTips, sizeof(errTips), "错误: %s() [%d]:[%s]", __FUNCTION__, errno,
+            FastSnprintf(errTips, sizeof(errTips), "错误: %s() [%d]:[%s]", __FUNCTION__, errno,
                 strerror(errno));
             fprintf(stderr, "%s", errTips);
             freezeit.log(errTips);
@@ -360,10 +362,10 @@ public:
         case WORK_MODE::V2UID: {
             for (const int pid : appInfo.pids) {
                 if (V2UIDSpareMode)
-                    Utils::FastSnprintf(path, sizeof(path), cgroupV2SpaceUidPidPath, 
+                    FastSnprintf(path, sizeof(path), cgroupV2SpaceUidPidPath, 
                         appInfo.isSystemApp ? "system" : "apps", appInfo.uid, pid);
                 else
-                    Utils::FastSnprintf(path, sizeof(path), cgroupV2UidPidPath, appInfo.uid, pid);
+                    FastSnprintf(path, sizeof(path), cgroupV2UidPidPath, appInfo.uid, pid);
                 if (!Utils::writeString(path, freeze ? "1" : "0", 2))
                     freezeit.logFmt("%s [%s PID:%d] 失败(进程可能已结束或者Freezer控制器尚未初始化PID路径)",
                         freeze ? "冻结" : "解冻", appInfo.label.c_str(), pid);
@@ -399,11 +401,11 @@ public:
                 //snprintf(path, sizeof(path), "/proc/%d/cmdline", pid);
                 //return !Utils::readString(path).starts_with(appInfo.package);
 
-                Utils::FastSnprintf(path, sizeof(path), "/proc/%d", pid);
+                FastSnprintf(path, sizeof(path), "/proc/%d", pid);
                 struct stat statBuf {};
                 if (stat(path, &statBuf)) return true;
                 return (uid_t)appInfo.uid != statBuf.st_uid;
-                });
+            });
         }
 
         switch (appInfo.freezeMode) {
@@ -460,10 +462,10 @@ public:
             }
         }
         
-      //  if (freeze && appInfo.needBreakNetwork()) 
-        //    BreakNetWork(appInfo);
-        //else if(freeze && settings.enableBreakNetWork) 
-          //  BreakNetWork(appInfo);
+        if (freeze && appInfo.needBreakNetwork()) 
+            BreakNetWork(appInfo);
+        else if(freeze && settings.enableBreakNetWork) 
+            BreakNetWork(appInfo);
         
         END_TIME_COUNT;
         return appInfo.pids.size();
@@ -497,7 +499,7 @@ public:
             DIR* dir = opendir("/proc");
             if (dir == nullptr) {
                 char errTips[256];
-                Utils::FastSnprintf(errTips, sizeof(errTips), "错误: %s() [%d]:[%s]", __FUNCTION__, errno,
+                FastSnprintf(errTips, sizeof(errTips), "错误: %s() [%d]:[%s]", __FUNCTION__, errno,
                     strerror(errno));
                 fprintf(stderr, "%s", errTips);
                 freezeit.log(errTips);
@@ -511,7 +513,7 @@ public:
                 const int pid = Fastatoi(file->d_name);
                 if (pid <= 100) continue;
 
-                size_t len = Faststrlen(file->d_name);
+                const size_t len = Faststrlen(file->d_name);
 
                 char fullPath[64] = "/proc/";
                 memcpy(fullPath + 6, file->d_name, len);
@@ -569,7 +571,7 @@ public:
             DIR* dir = opendir("/proc");
             if (dir == nullptr) {
                 char errTips[256];
-                Utils::FastSnprintf(errTips, sizeof(errTips), "错误: %s() [%d]:[%s]", __FUNCTION__, errno,
+                FastSnprintf(errTips, sizeof(errTips), "错误: %s() [%d]:[%s]", __FUNCTION__, errno,
                     strerror(errno));
                 fprintf(stderr, "%s", errTips);
                 freezeit.log(errTips);
@@ -873,13 +875,15 @@ public:
 
         for (const int uid : newShowOnApp) {
             // 如果在待冻结列表则只需移除
-            if (pendingHandleList.erase(uid)) isupdate = true;
+            if (pendingHandleList.erase(uid)) {  isupdate = true; continue; }
 
             // 更新[打开时间]  并解冻
             auto& appInfo = managedApp[uid];
             appInfo.startTimestamp = time(nullptr);
 
-            setStandbyByLocalSocket(STANDBY::ACTIVE, appInfo);
+            if (!appInfo.isPermissive)
+                setStandbyByLocalSocket(STANDBY::ACTIVE, appInfo);
+                
             const int num = handleProcess(appInfo, false);
             if (num > 0) freezeit.logFmt("☀️解冻 %s %d进程", appInfo.label.c_str(), num);
             else freezeit.logFmt("😁启动 %s", appInfo.label.c_str());
@@ -994,7 +998,7 @@ public:
         char path [32];
         for (const int pid : appInfo.pids) {
             // 1:file 2:anon 3:all
-            Utils::FastSnprintf(path, sizeof(path), "/proc/%d/reclaim", pid);
+            FastSnprintf(path, sizeof(path), "/proc/%d/reclaim", pid);
             Utils::writeString(path, "file", 4);
         }
         if (settings.enableDebug) freezeit.logFmt("内存回收: %s ", appInfo.label.c_str());
@@ -1056,11 +1060,6 @@ public:
             }
 
             const int uidCount = (recvLen / 4) - 1; 
-            
-            if (static_cast<REPLY>(buff[uidCount]) != REPLY::SUCCESS) {
-                freezeit.log("获取音频播放事件失败");
-                return;
-            }
 
             currentAudioApp.clear();
 
@@ -1102,7 +1101,7 @@ public:
         sleep(3); 
 
         while (true) {
-            if (doze.isScreenOffStandby) { sleep(1); continue;}
+            if (doze.isScreenOffStandby) { sleep(5); continue;}
             int buff[128] = {};
 
             int recvLen = Utils::localSocketRequest(XPOSED_CMD::GET_INTENT, nullptr, 0, buff, 
@@ -1120,11 +1119,6 @@ public:
             }
 
             const int uidCount = (recvLen / 4) - 1; // 减去最后的状态码
-            
-            if (static_cast<REPLY>(buff[uidCount]) != REPLY::SUCCESS) {
-                freezeit.log("获取PendingIntent失败");
-                return;
-            }
 
             for (int i = 0; i < uidCount; i++) {
                 const int uid = buff[i];
@@ -1138,7 +1132,7 @@ public:
                     unFreezerTemporary(uid, 3);
                 }
             }
-            Utils::sleep_ms(1200);
+            Utils::sleep_ms(1500);
         }
     }
 
@@ -1272,42 +1266,7 @@ public:
 		getline(ss, line);
 
         
-        if (systemTools.SDK_INT_VER >= 29) { //Android 11 Android 12+
-
-			/* SDK 31-32-33
-			OnePlus6:/ # dumpsys activity lru
-			ACTIVITY MANAGER LRU PROCESSES (dumpsys activity lru)
-			  Activities:
-			  #45: cch+ 5 CEM  ---- 5537:com.tencent.mobileqq/u0a212
-			  Other:
-			  #39: svcb   SVC  ---- 19270:com.tencent.mm/u0a221
-
-			generic_x86_64:/ $ getprop ro.build.version.sdk
-			30
-			generic_x86_64:/ $ dumpsys activity lru
-			ACTIVITY MANAGER LRU PROCESSES (dumpsys activity lru)
-			  Activities:
-			  #30: fg     TOP  LCM 995:com.android.launcher3/u0a117 act:activities|recents
-			  Other:
-			  #29: cch+ 5 CEM  --- 801:com.android.permissioncontroller/u0a127
-			  # 6: pers   PER  LCM 1354:com.android.ims.rcsservice/1001
-			  # 5: psvc   PER  LCM 670:com.android.bluetooth/1002
-
-			!!! !!! !!!
-
-			generic_x86_64:/ $ getprop ro.build.version.sdk
-			29
-			generic_x86_64:/ # dumpsys activity lru
-			ACTIVITY MANAGER LRU PROCESSES (dumpsys activity lru)
-			  Activities:
-				#26: fore   TOP  2961:com.android.launcher3/u0a100  activity=activities|recents
-			  Other:
-				#25: cch+ 5 CEM  3433:com.android.dialer/u0a101
-				#24: prev   LAST 3349:android.process.acore/u0a52
-				#23: cch+ 5 CEM  4100:com.android.keychain/1000
-				#9: cch+75 CEM  3551:com.android.managedprovisioning/u0a59
-				#8: prcp   IMPB 2601:com.android.inputmethod.latin/u0a115
-			*/
+        if (systemTools.SDK_INT_VER >= 29) { 
 			auto getForegroundLevel = [](const char* ptr) {
 				// const char level[][8] = {
 				// // 0, 1,   2顶层,   3, 4常驻状态栏, 5, 6悬浮窗
@@ -1389,6 +1348,7 @@ public:
         DIR *dir = opendir("/proc/rekernel"); 
         if (!dir) return -1;
 
+        int port = -1;
         struct dirent *file;
         while ((file = readdir(dir))) {
             if (file->d_name[0] == '.') continue;  
@@ -1400,38 +1360,41 @@ public:
                 closedir(dir);
                 return 26;  
             }
-
-            int port = -1;
+            
             if (file->d_name[1] >= '3' && file->d_name[1] <= '5') {
                 port = 20 + (file->d_name[1] - '0');
-                closedir(dir);
-                return port;  
             }
         }
 
         closedir(dir);
-        return -1;  
+        return port;  
     }
 
 
     void ThawFunction() {
-        if (doze.isScreenOffStandby && doze.checkIfNeedToExit()) {
-            curForegroundApp = std::move(curFgBackup);
-            updateAppProcess();
-            
+        constexpr int Time_Ms = 200;
+        while (true) {
+            if (remainTimesToRefreshTopApp > 0) {
+                remainTimesToRefreshTopApp--;       
+                if (doze.isScreenOffStandby && doze.checkIfNeedToExit()) {
+                    curForegroundApp = std::move(curFgBackup);
+                    updateAppProcess();
+                }
+                else {
+                    if (systemTools.SDK_INT_VER >= 31) 
+                        getVisibleAppByLocalSocket(); 
+                    else 
+                        getVisibleAppByShellLRU();
+                    updateAppProcess(); // ~40us
+                }   
+            } 
+            Utils::sleep_ms(Time_Ms);
         }
-        else {
-            if (systemTools.SDK_INT_VER >= 31) 
-                getVisibleAppByLocalSocket(); 
-            else 
-                getVisibleAppByShellLRU();
-            updateAppProcess(); // ~40us
-        }   
     }
 
     void cpuSetTriggerTask() {
         constexpr int TRIGGER_BUF_SIZE = 8192;
-
+        constexpr int Count = 2;
         sleep(1);
 
         int inotifyFd = inotify_init();
@@ -1441,12 +1404,13 @@ public:
         }
 
         
-        int watch_d = inotify_add_watch(inotifyFd,
+      /*int watch_d = inotify_add_watch(inotifyFd,
             systemTools.SDK_INT_VER >= 33 ? cpusetEventPathA13
             : cpusetEventPathA12,
             IN_MODIFY);
+            */
         
-        //int watch_d = inotify_add_watch(inotifyFd, cpusetEventPath, IN_ALL_EVENTS);
+        int watch_d = inotify_add_watch(inotifyFd, cpusetEventPath, IN_ALL_EVENTS);
 
         if (watch_d < 0) {
             fprintf(stderr, "同步事件: 0xB1 (2/3)失败: [%d]:[%s]", errno, strerror(errno));
@@ -1457,7 +1421,7 @@ public:
 
         char buf[TRIGGER_BUF_SIZE];
         while (read(inotifyFd, buf, TRIGGER_BUF_SIZE) > 0) {
-            ThawFunction();
+            remainTimesToRefreshTopApp = Count;
         }
 
         inotify_rm_watch(inotifyFd, watch_d);
@@ -1468,6 +1432,8 @@ public:
 
     // Binder事件 需要额外magisk模块: ReKernel
     int binderEventTriggerTask(void) {
+        if (!settings.enableunFreezerTemporary) return -1;
+
         sleep(2); // 这里已经通知ReKernel清理了 uint 节点 不加会造成会ReKernel和NkBinder同时握手
 
         int skfd, ret;
@@ -1475,7 +1441,7 @@ public:
         socklen_t len;
         struct nlmsghdr* nlh = nullptr;
         struct sockaddr_nl saddr, daddr;
-        constexpr const char* umsg = "Hello! Re:Kernel!";
+        constexpr const char umsg[] = "Hello! Re:Kernel!";
         constexpr const char str[] = "#proc_remove"; // 通知rekernel清理"/proc/rekernel/"的unit节点 避免被用于环境检测
         
         if (!checkReKernel()) {
@@ -1519,7 +1485,7 @@ public:
         nlh->nlmsg_seq = 0;
         nlh->nlmsg_pid = saddr.nl_pid;
 
-        memcpy(NLMSG_DATA(nlh), umsg, Faststrlen(umsg)); 
+        memcpy(NLMSG_DATA(nlh), umsg, sizeof(umsg)); 
 
         #if DEBUG_DURATION
             freezeit.logFmt("Send msg to kernel:%s", umsg);
@@ -1560,7 +1526,7 @@ public:
                 freezeit.logFmt("ReKernel发送的通知:%s", u_info.msg);
             #endif
 
-            if (ptr != nullptr && isBinderType) {
+            if (ptr != nullptr) {
                 if (oneway == 1 && !isFreeBufferFull)
                     continue;  
 
@@ -1571,9 +1537,9 @@ public:
                     continue;
                 
                 auto& appInfo = managedApp[uid];
-
-                if (appInfo.isPermissive && appInfo.isFreeze && !pendingHandleList.contains(uid)) {
-                    freezeit.logFmt("[%s] 接收到Re:Kernel的Binder信息, 类别: %s 类型: %s, 将进行临时解冻", managedApp[uid].label.c_str(), oneway ? "ASYNC" : "SYNC", "临时解冻");     
+                //appInfo.isPermissive && 
+                if (appInfo.isFreeze && !pendingHandleList.contains(uid)) {
+                    freezeit.logFmt("[%s] 接收到Re:Kernel的Binder信息, 类别: %s 类型: %s, 将进行临时解冻", managedApp[uid].label.c_str(), oneway ? "ASYNC" : "SYNC", isBinderType ? "临时解冻" : "网络解冻");     
                     unFreezerTemporary(uid, 3);      
                 }              
             }     
@@ -1639,7 +1605,8 @@ public:
         getVisibleAppByShell(); // 获取桌面
 
         while (true) {
-            sleep(1);
+            Utils::sleep_ms(1000);
+
             systemTools.cycleCnt++;
 
             processPendingApp();//1秒一次
@@ -1653,7 +1620,7 @@ public:
             if (doze.isScreenOffStandby)continue;// 息屏状态 不用执行 以下功能
 
             systemTools.checkBattery();// 1分钟一次 电池检测
-            //checkUnFreeze();// 检查进程状态，按需临时解冻
+            checkUnFreeze();// 检查进程状态，按需临时解冻
             checkWakeup();// 检查是否有定时解冻
         }
     }
@@ -1667,7 +1634,7 @@ public:
         DIR* dir = opendir("/proc");
         if (dir == nullptr) {
             char errTips[256];
-            Utils::FastSnprintf(errTips, sizeof(errTips), "错误: %s() [%d]:[%s]", __FUNCTION__, errno,
+            FastSnprintf(errTips, sizeof(errTips), "错误: %s() [%d]:[%s]", __FUNCTION__, errno,
                 strerror(errno));
             fprintf(stderr, "%s", errTips);
             freezeit.log(errTips);
@@ -1854,7 +1821,7 @@ public:
                     freezeit.logFmt("解冻 Binder 发生异常 [%s:%u] ErrorCode:%d", appInfo.label.c_str(), binderInfo.pid, errorCode);
 
                     char tmp[32];
-                    Utils::FastSnprintf(tmp, sizeof(tmp), "/proc/%d/cmdline", binderInfo.pid);
+                    FastSnprintf(tmp, sizeof(tmp), "/proc/%d/cmdline", binderInfo.pid);
                         
                     freezeit.logFmt("cmdline:[%s]", Utils::readString(tmp).c_str());
 
@@ -1904,7 +1871,7 @@ public:
         binder_frozen_status_info info = { (uint32_t)getpid(), 0, 0 };
         if (ioctl(bs.fd, BINDER_GET_FROZEN_INFO, &info) < 0) {
             int ret = -errno;
-            freezeit.logFmt("Binder初始化失败 不支持 BINDER_FREEZER 特性 ErrroCode:%d", ret);
+            freezeit.logFmt("Binder初始化失败 不支持 BINDER_FREEZER 特性 ErrroCode:%d 可能是由于内核版本低于5.10", ret);
             close(bs.fd);
             bs.fd = -1;
             return;

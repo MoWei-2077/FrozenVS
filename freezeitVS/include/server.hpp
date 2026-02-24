@@ -132,7 +132,8 @@ public:
                 auto headerLen = recv(clnt_sock, dataHeader, sizeof(dataHeader), MSG_WAITALL);
                 if (headerLen != sizeof(dataHeader)) {
                     close(clnt_sock);
-                    fprintf(stderr, "clnt_sock recv dataHeader len[%ld]", headerLen);
+                    // 可能是其他软件想连接本端口 直接忽略噪声
+                    // fprintf(stderr, "clnt_sock recv dataHeader len[%ld]", headerLen);
                     continue;
                 }
 
@@ -187,10 +188,10 @@ public:
             replyPtr = replyBuf.get();
             replyLen = snprintf(replyBuf.get(), REPLY_BUF_SIZE,
                 "%s\n%s\n%s\n%s\n%s\n%d\n%s\n%s\n%s\n%s\n%u",
-                freezeit.prop["id"].c_str(), freezeit.prop["name"].c_str(),
-                freezeit.prop["version"].c_str(), freezeit.prop["versionCode"].c_str(),
-                freezeit.prop["author"].c_str(),
-                systemTools.cpuCluster, freezeit.moduleEnv.c_str(), freezer.getCurWorkModeStr(),
+                freezeit.prop[0], freezeit.prop[1],
+                freezeit.prop[2], freezeit.prop[3],
+                freezeit.prop[4],
+                systemTools.cpuCluster, freezeit.moduleEnv, freezer.getCurWorkModeStr(),
                 systemTools.androidVerStr.c_str(), systemTools.kernelVerStr.c_str(), systemTools.extMemorySize);
         } break;
 

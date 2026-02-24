@@ -5,18 +5,16 @@
 
 class Freezeit {
 private:
-    static constexpr const char* LOG_PATH = "/sdcard/Android/Frozen.log";
-
     constexpr static int LINE_SIZE = 1024 * 32;   //  32 KiB
     constexpr static int BUFF_SIZE = 1024 * 128;  // 128 KiB
 
     mutex logPrintMutex;
-    bool toFileFlag = false;
+
     size_t position = 0;
     char lineCache[LINE_SIZE] = "[00:00:00]  ";
     char logCache[BUFF_SIZE];
 
-    string propPath;
+    static constexpr const char* propPath = "/data/adb/modules/Frozen/module.prop";
 
     uint8_t* deBugFlagPtr = nullptr;
 
@@ -57,92 +55,49 @@ private:
         position += len;
     }
 
-    void toFile(const char* logStr, const int len) {
-        auto fp = fopen(LOG_PATH, "ab");
-        if (!fp) {
-            fprintf(stderr, "日志输出(追加模式)失败 [%d][%s]", errno, strerror(errno));
-            return;
-        }
-
-        auto fileSize = ftell(fp);
-        if ((fileSize + len) >= BUFF_SIZE) {
-            fclose(fp);
-            usleep(1000);
-            fp = fopen(LOG_PATH, "wb");
-            if (!fp) {
-                fprintf(stderr, "日志输出(超额清理模式)失败 [%d][%s]", errno, strerror(errno));
-                return;
-            }
-        }
-
-        fwrite(logStr, 1, len, fp);
-        fclose(fp);
+    static int propIndex(const char* key) {
+        if (!strcmp(key, "id")) return 0;
+        else if (!strcmp(key, "name")) return 1;
+        else if (!strcmp(key, "version")) return 2;
+        else if (!strcmp(key, "versionCode")) return 3;
+        else if (!strcmp(key, "author")) return 4;
+        else if (!strcmp(key, "description")) return 5;
+        return -1;
     }
 
-
 public:
+
+    const char* prop[7] = {
+        "Unknown", // id
+        "Unknown", // name
+        "Unknown", // version
+        "0",       // versionCode
+        "Unknown", // author
+        "Unknown", // description
+        nullptr
+    };
 
     bool isSamsung{ false };
     bool isOppoVivo{ false };
 
-
-    string modulePath;
-    string moduleEnv{ "Unknown" };
-
-    map<string, string> prop{
-            {"id",          "Unknown"},
-            {"name",        "Unknown"},
-            {"version",     "Unknown"},
-            {"versionCode", "0"},
-            {"author",      "Unknown"},
-            {"description", "Unknown"},
-    };
+    const char* moduleEnv = nullptr;
 
     Freezeit& operator=(Freezeit&&) = delete;
 
-    Freezeit(int argc, const string& fullPath) {
+    Freezeit() {
 
-        modulePath = Utils::parentDir(fullPath);
-
-        int versionCode = -1;
-        if (!access("/system/bin/magisk", F_OK)) {
+        if (!access("/system/bin/magisk", F_OK)) 
             moduleEnv = "Magisk";
-            versionCode = MAGISK::get_version_code();
-            if (versionCode <= 0) {
-                sleep(2);
-                versionCode = MAGISK::get_version_code();
-            }
-        }
-        else if (!access("/data/adb/ksud", F_OK)) {
+        else if (!access("/data/adb/ksud", F_OK)) 
             moduleEnv = "KernelSU";
-            versionCode = KSU::get_version_code();
-            if (versionCode <= 0) {
-                sleep(2);
-                versionCode = KSU::get_version_code();
-            }
-        }
-        else if (!access("/data/adb/ap/bin/apd", F_OK)) {
+        else if (!access("/data/adb/ap/bin/apd", F_OK)) 
 			moduleEnv = "APatch";
-			versionCode = APatch::get_version_code();
-			if (versionCode <= 0) {
-				sleep(2);
-				versionCode = APatch::get_version_code();
-			}
-		}
-        if (versionCode > 0)
-            moduleEnv += " (" + to_string(versionCode) + ")";
+		else 
+            moduleEnv = "Unknown";
 
-        toFileFlag = argc > 1;
-        if (toFileFlag) {
-            if (position)toFile(logCache, position);
-            const char tips[] = "日志已通过文件输出: /sdcard/Android/Frozen.log";
-            toMem(tips, sizeof(tips) - 1);
-        }
-
-        propPath = modulePath + "/module.prop";
-        auto fp = fopen(propPath.c_str(), "r");
+        auto fp = fopen(propPath, "r");
         if (!fp) {
-            fprintf(stderr, "找不到模块属性文件 [%s]", propPath.c_str());
+            fprintf(stderr, "找不到模块属性文件 [%s]", propPath);
             exit(-1);
         }
 
@@ -161,15 +116,15 @@ public:
                     break;
                 }
             }
-            prop[string(tmp)] = string(ptr + 1);
+            prop[propIndex(tmp)] = ptr;
         }
         fclose(fp);
 
 
-        logFmt("模块版本 %s(%s)", prop["version"].c_str(), prop["versionCode"].c_str());
+        logFmt("模块版本 %s(%s)", prop[2], prop[3]);
         logFmt("编译时间 %s %s UTC+8", compilerDate, __TIME__);
 
-        fprintf(stderr, "version %s", prop["version"].c_str()); // 发送当前版本信息给监控进程
+        fprintf(stderr, "version %s", prop[2]); // 发送当前版本信息给监控进程
 
         char res[256];
         if (__system_property_get("gsm.operator.alpha", res) > 0 && res[0] != ',')
@@ -198,32 +153,13 @@ public:
     void setDebugPtr(uint8_t* ptr) {
         deBugFlagPtr = ptr;
     }
+
     bool isDebugOn() {
         if (deBugFlagPtr == nullptr)
             return false;
 
         return *deBugFlagPtr;
     }
-
-    bool saveProp() {
-        auto fp = fopen(propPath.c_str(), "wb");
-        if (!fp)
-            return false;
-
-        char tmp[1024];
-        size_t len = Utils::FastSnprintf(tmp, sizeof(tmp),
-            "id=%s\nname=%s\nversion=%s\nversionCode=%s\nauthor=%s\ndescription=%s\nupdateJson=%s\n",
-            prop["id"].c_str(), prop["name"].c_str(), prop["version"].c_str(),
-            prop["versionCode"].c_str(),
-            prop["author"].c_str(), prop["description"].c_str(),
-            prop["updateJson"].c_str());
-
-        size_t writeLen = fwrite(tmp, 1, len, fp);
-        fclose(fp);
-
-        return (writeLen == len);
-    }
-
 
     int formatTimePrefix() {
         time_t timeStamp = time(nullptr) + 8 * 3600L;
@@ -272,10 +208,7 @@ public:
 
         lineCache[len++] = '\n';
 
-        if (toFileFlag)
-            toFile(lineCache, len);
-        else
-            toMem(lineCache, len);
+        toMem(lineCache, len);
     }
 
     void log(const char* str, size_t strlen) {
@@ -288,10 +221,7 @@ public:
 
         lineCache[len++] = '\n';
 
-        if (toFileFlag)
-            toFile(lineCache, len);
-        else
-            toMem(lineCache, len);
+        toMem(lineCache, len);
     }
 
 
@@ -311,28 +241,23 @@ public:
 
         lineCache[len++] = '\n';
 
-        if (toFileFlag)
-            toFile(lineCache, len);
-        else
-            toMem(lineCache, len);
+        toMem(lineCache, len);
     }
 
-    void debug(const string_view& str) {
-        if (!isDebugOn())return;
+    void debug(const char* str) {
+        if (!isDebugOn()) return;
 
         lock_guard<mutex> lock(logPrintMutex);
 
         const int prefixLen = formatTimeDebug();
 
-        int len = str.length() + prefixLen;
-        memcpy(lineCache + prefixLen, str.data(), str.length());
+        int strlen = Faststrlen(str);
+        int len = strlen + prefixLen;
+        memcpy(lineCache + prefixLen, str, strlen);
 
         lineCache[len++] = '\n';
 
-        if (toFileFlag)
-            toFile(lineCache, len);
-        else
-            toMem(lineCache, len);
+        toMem(lineCache, len);
     }
 
     template<typename... Args>
@@ -343,7 +268,7 @@ public:
 
         const int prefixLen = formatTimeDebug();
 
-        int len = Utils::FastSnprintf(lineCache + prefixLen, (size_t)(LINE_SIZE - prefixLen), fmt, std::forward<Args>(args)...) + prefixLen;
+        int len = FastSnprintf(lineCache + prefixLen, (size_t)(LINE_SIZE - prefixLen), fmt, std::forward<Args>(args)...) + prefixLen;
 
         if (len <= 13 || LINE_SIZE <= (len + 1)) {
             lineCache[13] = 0;
@@ -353,10 +278,7 @@ public:
 
         lineCache[len++] = '\n';
 
-        if (toFileFlag)
-            toFile(lineCache, len);
-        else
-            toMem(lineCache, len);
+        toMem(lineCache, len);
     }
 
     void clearLog() {

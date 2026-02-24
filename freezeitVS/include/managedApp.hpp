@@ -8,8 +8,8 @@
 
 class ManagedApp {
 private:
-    string cfgPath;
-    string labelPath;
+    static constexpr const char* cfgPath = "/data/adb/modules/Frozen/appcfg.txt";
+    static constexpr const char* labelPath = "/data/adb/modules/Frozen/applabel.txt";
 
     Freezeit& freezeit;
     Settings& settings;
@@ -81,6 +81,8 @@ private:
             "com.google.android.apps.nexuslauncher",// pixel 桌面
             "com.oppo.launcher",
 
+            "me.bmax.apatch",                       // Apatch  
+            "me.yuki.folk",                         // FolkPatch 
             "me.weishu.kernelsu",                   // KernelSU
             "top.canyie.dreamland.manager",         // Dreamland
             "com.coloros.packageinstaller",         // 安装包管理
@@ -424,7 +426,7 @@ private:
 
 public:
 
-    const set<FREEZE_MODE> FREEZE_MODE_SET{
+    const unordered_set<FREEZE_MODE> FREEZE_MODE_SET{
             FREEZE_MODE::TERMINATE,
             FREEZE_MODE::SIGNAL,
             FREEZE_MODE::SIGNAL_BREAK,
@@ -437,9 +439,6 @@ public:
     ManagedApp& operator=(ManagedApp&&) = delete;
 
     ManagedApp(Freezeit& freezeit, Settings& settings) : freezeit(freezeit), settings(settings) {
-        cfgPath = freezeit.modulePath + "/appcfg.txt";
-        labelPath = freezeit.modulePath + "/applabel.txt";
-
         packageListBuff = make_unique<char[]>(PACKAGE_LIST_BUF_SIZE);
 
         updateAppList();
@@ -451,9 +450,9 @@ public:
         update2xposedByLocalSocket();
     }
 
-    const static int UID_START = 10000;
-    const static int UID_END = 14000;
-    const static int appMaxNum = UID_END - UID_START;
+    constexpr static int UID_START = 10000;
+    constexpr static int UID_END = 14000;
+    constexpr static int appMaxNum = UID_END - UID_START;
     appInfoStruct appInfoMap[appMaxNum];
 
     auto& operator[](const int uid) { return appInfoMap[uid - UID_START]; }
@@ -490,7 +489,7 @@ public:
         appInfoMap[uid - UID_START].freezeMode = FREEZE_MODE::WHITEFORCE;
     }
 
-    bool readPackagesListA12(map<int, string>& _allAppList, map<int, string>& _thirdAppList) {
+    bool readPackagesListA12(unordered_map<int, string>& _allAppList, unordered_map<int, string>& _thirdAppList) {
         START_TIME_COUNT;
 
         stringstream ss;
@@ -516,7 +515,7 @@ public:
         return _allAppList.size() > 0;
     }
 
-    bool readPackagesListA10_11(map<int, string>& _allAppList) {
+    bool readPackagesListA10_11(unordered_map<int, string>& _allAppList) {
         START_TIME_COUNT;
 
         stringstream ss;
@@ -538,7 +537,7 @@ public:
         return _allAppList.size() > 0;
     }
 
-    void readCmdPackagesAll(map<int, string>& _allAppList) {
+    void readCmdPackagesAll(unordered_map<int, string>& _allAppList) {
         START_TIME_COUNT;
         stringstream ss;
         string line;
@@ -560,7 +559,7 @@ public:
         END_TIME_COUNT;
     }
 
-    void readCmdPackagesThird(map<int, string>& _thirdAppList) {
+    void readCmdPackagesThird(unordered_map<int, string>& _thirdAppList) {
         START_TIME_COUNT;
         stringstream ss;
         string line;
@@ -586,7 +585,7 @@ public:
     void updateAppList() {
         START_TIME_COUNT;
 
-        map<int, string> allAppList, thirdAppList;
+        unordered_map<int, string> allAppList, thirdAppList;
 
         if (!readPackagesListA12(allAppList, thirdAppList)) 
             readCmdPackagesAll(allAppList);
@@ -711,7 +710,7 @@ public:
     }
 
     bool isSystemApp(const char* ptr) {
-        const char* prefix[] = {
+        constexpr const char* prefix[] = {
                 "com.miui.",
                 "com.oplus.",
                 "com.coloros.",
@@ -759,22 +758,17 @@ public:
     }
 
     void saveConfig() {
-        string tmp;
-        tmp.reserve(1024UL * 128);
+        char tmp[1024 * 128];
         for (const auto& appInfo : appInfoMap) {
             if (appInfo.uid < UID_START)continue;
 
             if (appInfo.freezeMode < FREEZE_MODE::WHITEFORCE) {
-                tmp += appInfo.package;
-                tmp += " ";
-                tmp += to_string(static_cast<int>(appInfo.freezeMode));
-                tmp += " ";
-                tmp += to_string(appInfo.isPermissive ? 1 : 0);
-                tmp += "\n";
+                FastSnprintf(tmp, sizeof(tmp),"%s %d %d\n", appInfo.package.c_str(), static_cast<int>(appInfo.freezeMode),
+                    appInfo.isPermissive ? 1 : 0);
             }
         }
 
-        freezeit.log(Utils::writeString(cfgPath.c_str(), tmp.c_str(), tmp.length()) ?
+        freezeit.log(Utils::writeString(cfgPath, tmp, Faststrlen(tmp)) ?
             "配置保存成功" : "⚠️配置保存失败⚠️");
     }
 
@@ -844,7 +838,7 @@ public:
         ifstream file(labelPath);
 
         if (!file.is_open()) {
-            freezeit.logFmt("读取应用名称文件失败: [%s]", labelPath.c_str());
+            freezeit.logFmt("读取应用名称文件失败: [%s]", labelPath);
             return;
         }
 
@@ -875,22 +869,18 @@ public:
     }
 
     void saveLabel() {
-        auto fd = open(labelPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        auto fd = open(labelPath, O_WRONLY | O_CREAT | O_TRUNC, 0666);
         if (fd < 0) {
-            freezeit.logFmt("保存应用名称文件失败: [%s]", labelPath.c_str());
+            freezeit.logFmt("保存应用名称文件失败: [%s]", labelPath);
             return;
         }
 
-        string tmp;
-        tmp.reserve(1024L * 16);
+        char temp[1024 * 16];
         for (const auto& appInfo : appInfoMap)
             if (appInfo.uid > 0 && appInfo.package != appInfo.label) {
-                tmp += appInfo.package;
-                tmp += "####";
-                tmp += appInfo.label;
-                tmp += '\n';
+                FastSnprintf(temp, sizeof(temp), "%s####%s\n", appInfo.package.c_str(), appInfo.label.c_str());
             }
-        write(fd, tmp.c_str(), tmp.length());
+        write(fd, temp, Faststrlen(temp));
         close(fd);
     }
 

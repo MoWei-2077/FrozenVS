@@ -12,6 +12,7 @@
 #include <mutex>
 #include <limits>
 #include <set>
+#include <unordered_map>
 #include <unordered_set>
 #include <map>
 
@@ -55,6 +56,7 @@
 using namespace LibUtils;
 
 using std::set;
+using std::unordered_map;
 using std::unordered_set;
 using std::map;
 using std::multimap;
@@ -204,7 +206,7 @@ struct appInfoStruct {
     FREEZE_MODE freezeMode = FREEZE_MODE::FREEZER; // [10]:杀死 [20]:SIGSTOP [30]:freezer [40]:配置 [50]:内置
     bool isPermissive = true;      // 宽容的 有前台服务也算前台
     bool isFreeze = false;         // 冻结的 
-    bool isAudioPlaying = false;          // 正在播放音频的应用
+    bool isAudioPlaying = false;   // 正在播放音频的应用
     int delayCnt = 0;              // Binder冻结失败而延迟次数
     int timelineUnfrozenIdx = -1;  // 解冻时间线索引
     bool isSystemApp = true;       // 是否系统应用
@@ -319,77 +321,6 @@ public:
 
 
 namespace Utils {
-    static char* emit_u32(char *buf, char *end, uint32_t val) {
-        char tmp[11];
-        char *out = tmp + sizeof(tmp);
-    
-        do {
-            *--out = (char)('0' + (val % 10u));
-            val /= 10u;
-        } while (val);
-        const size_t len = (size_t)(tmp + sizeof(tmp) - out);
-    
-        const size_t avail = (end > buf) ? (size_t)(end - buf) : 0;
-        const size_t copy = len < avail ? len : avail;
-    
-        memcpy(buf, out, copy);
-    
-        return buf + copy;
-    }
-
-    static int FastVsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
-        char *p = buf;
-        char *const end = buf + (size ? size : (size_t)-1);
-    
-        while (*fmt) {
-            if (*fmt != '%') {
-                if (p < end) *p = *fmt;
-                ++p; ++fmt;
-                continue;
-            }
-            ++fmt;                          
-            switch (*fmt++) {
-            case 'd': {
-                int v = va_arg(ap, int);
-                if (v < 0) {
-                    if (p < end) *p = '-';
-                    ++p;
-                    v = -v;
-                }
-                p = emit_u32(p, end, (uint32_t)v);
-                break;
-            }
-            case 's': {
-                const char *s = va_arg(ap, const char *);
-                if (!s) s = "(null)";
-                while (*s) {
-                    if (p < end) *p = *s;
-                    ++p; ++s;
-                }
-                break;
-            }
-            case '%':
-                if (p < end) *p = '%';
-                ++p;
-                break;
-            }
-        }
-    
-        if (size) {                       
-            if (p >= end) p = end - 1;
-            *p = '\0';
-        }
-        return (int)(p - buf);              
-    }
-    
-    int FastSnprintf(char* buf, size_t size, const char* fmt, ...) {
-        va_list ap;
-        va_start(ap, fmt);
-        int r = FastVsnprintf(buf, size, fmt, ap);
-        va_end(ap);
-        return r;
-    }
-
     vector<string> splitString(const string& str, const string& delim) {
         if (str.empty()) return {};
         if (delim.empty()) return { str };
@@ -612,13 +543,6 @@ namespace Utils {
         return true;
     }
 
-    string parentDir(string path) {
-        if (path.empty())return "";
-        if (path.back() == '/') path.pop_back();
-        auto idx = path.find_last_of('/');
-        return idx == string::npos ? path : path.substr(0, idx);
-    }
-
     int localSocketRequest(
         const XPOSED_CMD requestCode,
         const void* payloadBuff,
@@ -766,14 +690,14 @@ namespace Utils {
 
                     if (kill(pid, SIGKILL) < 0) {
                         char tips[128];
-                        auto len = Utils::FastSnprintf(tips, sizeof(tips), "杀死 [工作进程 pid:%d] 失败", pid);
+                        auto len = FastSnprintf(tips, sizeof(tips), "杀死 [工作进程 pid:%d] 失败", pid);
                         printException(versionStr, 0, tips, len);
                     }
 
                     int status = 0;
                     if (waitpid(pid, &status, __WALL) != pid) {
                         char tips[128];
-                        auto len = Utils::FastSnprintf(tips, sizeof(tips), "waitpid 异常: [%d] HEX[%s]", status,
+                        auto len = FastSnprintf(tips, sizeof(tips), "waitpid 异常: [%d] HEX[%s]", status,
                             bin2Hex(&status, 4).c_str());
                         printException(versionStr, 0, tips, len);
                     }

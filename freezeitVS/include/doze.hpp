@@ -82,7 +82,7 @@ private:
             return 0;
         }
 
-        const string_view str[3] = { "Xposed 获取屏幕状态失败", "Xposed 息屏中", "Xposed 亮屏中" };
+        constexpr const char* str[3] = { "Xposed 获取屏幕状态失败", "Xposed 息屏中", "Xposed 亮屏中" };
         freezeit.debug(str[buff[0] < 3 ? buff[0] : 1]);
 
 
@@ -105,16 +105,17 @@ private:
         public static final int DISPLAY_STATE_ON_SUSPEND = 6; //非Doze, 类似4
         */
         do {
-            //char res[128]; // MAX LEN: 96
-            //int mScreenState;
-            //if (__system_property_get("debug.tracing.screen_state", res) < 1)
-            //    mScreenState = getScreenByLocalSocket();
-            //else mScreenState = res[0] - '0';
-
+            char res[128]; // MAX LEN: 96
+            int mScreenState;
+            if (__system_property_get("debug.tracing.screen_state", res) < 1)
+                mScreenState = getScreenByLocalSocket();
+            else mScreenState = res[0] - '0';
+/*
             int mScreenState = getScreenByLocalSocket();
             if (mScreenState < 0)
                 mScreenState = systemTools.getScreenProperty();
-
+            */
+            // 使用localsocket 频繁传输 开销大
             if (mScreenState != 1 && mScreenState != 2)
                 freezeit.debugFmt("屏幕其他状态 mScreenState[%d]", mScreenState);
 
@@ -140,7 +141,6 @@ private:
 
             // "Unknown", "Charging", "Discharging", "Not charging", "Full"
             // https://cs.android.com/android/kernel/superproject/+/common-android-mainline-kleaf:common/drivers/power/supply/power_supply_sysfs.c;l=75
-            char res[64];
             Utils::readString("/sys/class/power_supply/battery/status", res, sizeof(res));
             if (!strncmp(res, "Charging", 4) || !strncmp(res, "Full", 4)) {
                 freezeit.debug("息屏, 充电中");

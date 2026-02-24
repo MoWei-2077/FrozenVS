@@ -8,7 +8,7 @@ private:
     Freezeit& freezeit;
     mutex writeSettingMutex;
 
-    string settingsPath;
+    static constexpr const char* settingsPath = "/data/adb/modules/Frozen/settings.db";
 
     constexpr static size_t SETTINGS_SIZE = 256;
     uint8_t settingsVar[SETTINGS_SIZE] = {
@@ -36,7 +36,7 @@ private:
             1,  //[21] 全局断网
             0,  //[22] 调整 lmk 参数
             0,  //[23] 深度Doze
-            0,  //[24]
+            0,  //[24] 打印日志
             0,  //[25]
             0,  //[26]
             0,  //[27]
@@ -80,6 +80,7 @@ public:
     uint8_t& enableBreakNetWork = settingsVar[21];            // 全局断网
     uint8_t& enableLMK = settingsVar[22];                     // 后台优化
     uint8_t& enableDoze = settingsVar[23];                    // 深度Doze
+    uint8_t& enableWriteLog = settingsVar[24];                // 打印日志
 
     uint8_t& enableDebug = settingsVar[30];                   // 调试日志
 
@@ -89,9 +90,7 @@ public:
 
         freezeit.setDebugPtr(settingsVar+30);
 
-        settingsPath = freezeit.modulePath + "/settings.db";
-
-        auto fd = open(settingsPath.c_str(), O_RDONLY);
+        auto fd = open(settingsPath, O_RDONLY);
         if (fd > 0) {
             uint8_t tmp[SETTINGS_SIZE] = { 0 };
             int readSize = read(fd, tmp, SETTINGS_SIZE);
@@ -180,7 +179,7 @@ public:
 
     bool save() {
         lock_guard<mutex> lock(writeSettingMutex);
-        auto fd = open(settingsPath.c_str(), O_WRONLY | O_TRUNC | O_CREAT, 0666);
+        auto fd = open(settingsPath, O_WRONLY | O_TRUNC | O_CREAT, 0666);
         if (fd > 0) {
             int writeSize = write(fd, settingsVar, SETTINGS_SIZE);
             close(fd);
@@ -198,31 +197,31 @@ public:
         switch (idx) {
         case 2: { // freezeTimeout sec
             if (val < 1 || 60 < val)
-                return Utils::FastSnprintf(replyBuf, REPLY_BUF_SIZE, "超时冻结参数错误, 欲设为:%d", val);
+                return FastSnprintf(replyBuf, REPLY_BUF_SIZE, "超时冻结参数错误, 欲设为:%d", val);
         }
               break;
 
         case 3: {  // wakeupTimeoutIdx
             if (val > wakeupTimeoutIdxMax)
-                return Utils::FastSnprintf(replyBuf, REPLY_BUF_SIZE, "定时解冻参数错误 欲设为:%d", val);
+                return FastSnprintf(replyBuf, REPLY_BUF_SIZE, "定时解冻参数错误 欲设为:%d", val);
         }
               break;
 
         case 4: { // wakeupTimeoutIdx sec
             if (val < 3 || 120 < val)
-                return Utils::FastSnprintf(replyBuf, REPLY_BUF_SIZE, "超时杀死参数错误, 欲设为:%d", val);
+                return FastSnprintf(replyBuf, REPLY_BUF_SIZE, "超时杀死参数错误, 欲设为:%d", val);
         }
               break;
 
         case 5: { // setMode 0-1-2
             if (val > 2)
-                return Utils::FastSnprintf(replyBuf, REPLY_BUF_SIZE, "冻结模式参数错误, 欲设为:%d", val);
+                return FastSnprintf(replyBuf, REPLY_BUF_SIZE, "冻结模式参数错误, 欲设为:%d", val);
         }
               break;
 
         case 6: { // refreezeTimeoutIdx
             if (val > refreezeTimeoutIdxMax)
-                return Utils::FastSnprintf(replyBuf, REPLY_BUF_SIZE, "定时压制参数错误, 欲设为:%d", val);
+                return FastSnprintf(replyBuf, REPLY_BUF_SIZE, "定时压制参数错误, 欲设为:%d", val);
         }
               break;
 
@@ -249,23 +248,23 @@ public:
         case 30: // 调试日志
         {
             if (val != 0 && val != 1)
-                return Utils::FastSnprintf(replyBuf, REPLY_BUF_SIZE, "开关值错误, 正常范围:0/1, 欲设为:%d", val);
+                return FastSnprintf(replyBuf, REPLY_BUF_SIZE, "开关值错误, 正常范围:0/1, 欲设为:%d", val);
         }
         break;
 
         default: {
             freezeit.logFmt("🔧设置失败，设置项不存在, [%d]:[%d]", idx, val);
-            return Utils::FastSnprintf(replyBuf, REPLY_BUF_SIZE, "设置项不存在, [%d]:[%d]", idx, val);
+            return FastSnprintf(replyBuf, REPLY_BUF_SIZE, "设置项不存在, [%d]:[%d]", idx, val);
         }
         }
 
         settingsVar[idx] = val;
         if (save()) {
-            return Utils::FastSnprintf(replyBuf, REPLY_BUF_SIZE, "success");
+            return FastSnprintf(replyBuf, REPLY_BUF_SIZE, "success");
         }
         else {
             freezeit.logFmt("🔧设置失败，写入设置文件失败, [%d]:%d", idx, val);
-            return Utils::FastSnprintf(replyBuf, REPLY_BUF_SIZE, "写入设置文件失败, [%d]:%d", idx, val);
+            return FastSnprintf(replyBuf, REPLY_BUF_SIZE, "写入设置文件失败, [%d]:%d", idx, val);
         }
     }
 };
