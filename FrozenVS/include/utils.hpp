@@ -378,29 +378,6 @@ namespace Utils {
         return mktime(&timeinfo);
     }
 
-    // https://blog.csdn.net/lanmanck/article/details/8423669
-    vector<int> getTouchEventNum() {
-        vector<int> res;
-
-        for (int i = 0; i < 16; i++) {
-            char path[64];
-            snprintf(path, 64, "/dev/input/event%d", i);
-            auto fd = open(path, O_RDONLY, 0);
-            if (fd < 0)continue;
-
-            uint32_t flagBit = 0;
-            constexpr uint32_t cmd = EVIOCGBIT(0, sizeof(uint32_t));
-            ioctl(fd, cmd, &flagBit);
-            if (flagBit & (1 << EV_ABS)) res.emplace_back(i);
-            close(fd);
-        }
-        if (res.size() == 0) {
-            fprintf(stderr, "前台任务同步事件获取失败");
-            exit(-1);
-        }
-        return res;
-    }
-
     int readInt(const char* path) {
         auto fd = open(path, O_RDONLY);
         if (fd < 0) return 0;

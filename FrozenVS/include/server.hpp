@@ -352,7 +352,7 @@ public:
             //    freezeit.logFmt("杀死策略变更的应用: \n%s\n", tips.c_str());
 
             auto runningUids = freezer.getRunningUids(changeUidSet);
-            if (runningUids.size()) {
+            if (!runningUids.empty()) {
                 freezer.unFreezerTemporary(runningUids);
                 tips.clear();
                 for (auto& uid : runningUids) {

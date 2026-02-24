@@ -716,14 +716,14 @@ public:
         }
         closedir(dir);
 
-        if (uidSet.size() == 0) {
+        if (uidSet.empty()) {
             freezeit.log("后台很干净，一个黑名单应用都没有");
         }
         else {
-
-            if (naughtyApp.size()) {
-                stateStr.append("\n 发现 [未冻结状态] 的进程, 即将临时解冻\n");
-                // 后面加入到冻结名单中 强制冻结
+            if (!naughtyApp.empty()) {
+                stateStr.append("\n 发现 [未冻结状态] 的进程, 即将进行冻结\n");
+                for (const int uid : naughtyApp) 
+                    pendingHandleList[uid] = 1;
             }
 
             stateStr.appendFmt("\n总计 %d 应用 %d 进程, 占用内存 ", (int)uidSet.size(), (int)pidSet.size());
@@ -761,10 +761,9 @@ public:
             if (!curForegroundApp.contains(uid))
                 toBackgroundApp.emplace_back(uid);
 
-        if (newShowOnApp.size() || toBackgroundApp.size())
-            lastForegroundApp = curForegroundApp;
-        else
-            return;
+        if (newShowOnApp.empty() && toBackgroundApp.empty()) return;
+
+        lastForegroundApp = curForegroundApp;
 
         for (const int uid : newShowOnApp) {
             // 如果在待冻结列表则只需移除
@@ -1426,7 +1425,7 @@ public:
             }
 
 
-            if (hasSync.size()) {
+            if (!hasSync.empty()) {
                 for (auto it = appInfo.pids.begin(); it != appInfo.pids.end();) {
                     if (hasSync.contains(*it)) {
                         freezeit.debugFmt("杀掉进程 pid: %d", *it);

@@ -513,7 +513,7 @@ public:
                 _thirdAppList[uid] = packageName;
         }
         END_TIME_COUNT;
-        return _allAppList.size() > 0;
+        return !_allAppList.empty();
     }
 
     bool readPackagesListA10_11(map<int, string>& _allAppList) {
@@ -535,7 +535,7 @@ public:
             _allAppList[uid] = package;
         }
         END_TIME_COUNT;
-        return _allAppList.size() > 0;
+        return !_allAppList.empty();
     }
 
     void readCmdPackagesAll(map<int, string>& _allAppList) {
@@ -593,7 +593,7 @@ public:
             readCmdPackagesThird(thirdAppList);
         }
 
-        if (allAppList.size() == 0) {
+        if (allAppList.empty()) {
             freezeit.log("没有应用或获取失败");
             return;
         }
