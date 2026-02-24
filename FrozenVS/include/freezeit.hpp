@@ -120,7 +120,16 @@ public:
                 sleep(2);
                 versionCode = KSU::get_version_code();
             }
-        }
+        } 
+        else if (!access("/data/adb/ap/bin/apd", F_OK)) {
+            moduleEnv = "APatch";
+            versionCode = APatch::get_version_code();
+            if (versionCode <= 0) {
+                sleep(2);
+                versionCode = APatch::get_version_code();
+            }
+        } 
+
         if (versionCode > 0)
             moduleEnv += " (" + to_string(versionCode) + ")";
 

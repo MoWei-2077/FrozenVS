@@ -106,7 +106,8 @@ constexpr auto FORK_DOUBLE = 1;
 enum class WORK_MODE : uint32_t {
     V2FROZEN = 0,
     V2UID = 1,
-    GLOBAL_SIGSTOP = 2,
+    V1FROZEN = 2,
+    GLOBAL_SIGSTOP = 3,
 };
 
 enum class FREEZE_MODE : uint32_t {
@@ -684,6 +685,13 @@ namespace MAGISK {
         Utils::popenRead("/system/bin/magisk -V", buff, sizeof(buff));
         return isdigit(buff[0]) ? atoi(buff) : -1;
     }
+}
+
+namespace APatch {
+	int get_version_code() {
+		const int version = Utils::readInt("/data/adb/ap/version");
+		return version;
+	}
 }
 
 // https://github.com/tiann/KernelSU/blob/main/manager/app/src/main/cpp/ksu.cc

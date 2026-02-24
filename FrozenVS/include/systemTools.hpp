@@ -211,8 +211,7 @@ public:
     }
 
     void InitLMK() {
-        if (!settings.enableLMK || SDK_INT_VER < 30 || SDK_INT_VER > 35)
-            return;
+        if (!settings.enableLMK) return;
 
         // https://cs.android.com/android/platform/superproject/+/master:system/memory/lmkd/lmkd.cpp
         // https://source.android.com/devices/tech/perf/lmkd
@@ -221,20 +220,30 @@ public:
         // 18432:0,23040:100,27648:200,32256:250,55296:900,80640:950
         //  8192:0,12288:100,16384:200,32768:250,65536:900,96000:950
         //  4096:0,5120:100,8192:200,32768:250,65536:900,96000:950
-        const char* lmkdParameter[] = {
+        constexpr const char* lmkdParameter[] = {
+                "ro.config.low_ram", "false",// A10
+                "ro.lmk.use_psi", "true",
+                "ro.lmk.use_minfree_levels", "false",
                 "ro.lmk.low", "1001",
                 "ro.lmk.medium", "1001",
-                "ro.lmk.critical", "100",
-                "ro.lmk.use_minfree_levels", "true",
-                "ro.lmk.use_new_strategy", "true",
-                "ro.lmk.swap_free_low_percentage", "10",
-                "sys.lmk.minfree_levels",
-                "8192:0,12288:100,16384:200,32768:250,55296:900,80640:950",
+                "ro.lmk.critical", "0",
+                "ro.lmk.critical_upgrade", "false",   
+                "ro.lmk.upgrade_pressure", "100",
+                "ro.lmk.downgrade_pressure", "100",
+                "ro.lmk.kill_heaviest_task", "false",
+                "ro.lmk.kill_timeout_ms", "0", // 以下是A11以上的选项
+                "ro.lmk.psi_partial_stall_ms", "200",
+                "ro.lmk.psi_complete_stall_ms", "700",
+                "ro.lmk.thrashing_limit", "30",
+                "ro.lmk.thrashing_limit_decay", "50",
+                "ro.lmk.swap_util_max", "100",
+                "ro.lmk.swap_free_low_percentage", "10", // 将被遗弃的旧选项
+                "ro.lmk.debug", "false", // 将被遗弃的旧选项
         };
         // const char* adj = "0,100,200,250,900,950"; //另有 0,1,2,4,9,12
-        const char minfree[] = "8192,12288,16384,32768,55296,80640";
+        static constexpr const char minfree[] = "8192,12288,16384,32768,55296,80640";
 
-        int len = 14;
+        int len = 36;
         if (!access("/sys/module/lowmemorykiller/parameters", F_OK)) {
             len -= 2;
 
@@ -265,6 +274,19 @@ public:
             else {
                 freezeit.log("未找到 KSU resetprop");
             }
+        }
+        else if (freezeit.moduleEnv == "Apatch") {
+			if (!access("/data/adb/ap/bin/resetprop", F_OK)) {
+				string cmd;
+				for (int i = 0; i < len; i += 2)
+					cmd += string("/data/adb/ap/bin/resetprop") + lmkdParameter[i] + " " + lmkdParameter[i + 1] + ";";
+				cmd += "sleep 1;lmkd --reinit";
+				system(cmd.c_str());
+				freezeit.log("更新参数 LMK");
+			}
+            else {
+				freezeit.log("未找到 APatch resetprop");
+			}
         }
     }
 
@@ -320,7 +342,7 @@ public:
     }
 
     void checkBattery() {
-        const int TIMEOUT = 60;
+        constexpr int TIMEOUT = 60;
         static int secCnt = 58;
         static int lastCapacity = 0;
         static int lastMinute = 0;

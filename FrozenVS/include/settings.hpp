@@ -17,7 +17,7 @@ private:
             10, //[2] freezeTimeout sec
             4,  //[3] wakeupTimeoutIdx  定时唤醒 参数索引 0-5：关闭, 5m, 15m, 30m, 1h, 2h
             20, //[4] terminateTimeout sec
-            0,  //[5] setMode 设置Freezer模式  0: v2frozen(默认), 1: v2uid, 2: 全局SIGSTOP
+            0,  //[5] setMode 设置Freezer模式  0: v2(FROZEN)(默认), 1: v2(UID), 2: V1(FROZEN) 3: 全局SIGSTOP
             2,  //[6] refreezeTimeoutIdx 定时压制 参数索引 0-3：关闭, 30m, 1h, 2h
             0,  //[7]
             0,  //[8]
@@ -25,17 +25,17 @@ private:
             1,  //[10] 
             0,  //[11]
             0,  //[12]
-            1,  //[13] 电池监控
+            0,  //[13] 电池监控
             0,  //[14] 电流校准
             0,  //[15] 双电芯
-            1,  //[16] 调整 lmk 参数 仅安卓12-15
-            1,  //[17] 深度Doze
+            1,  //[16] 开机冻结
+            0,  //[17] Binder冻结
             0,  //[18] 
-            1,  //[19]
-            0,  //[20]
-            0,  //[21]
-            0,  //[22]
-            0,  //[13]
+            0,  //[19] 
+            0,  //[20] 临时解冻
+            0,  //[21] 全局断网
+            0,  //[22] 调整 lmk 参数
+            0,  //[23] 深度Doze
             0,  //[24]
             0,  //[25]
             0,  //[26]
@@ -60,22 +60,26 @@ private:
 
 
 public:
-    uint8_t& settingsVer = settingsVar[0];          // 设置文件版本
-    //uint8_t& unknown = settingsVar[1];          // 
-    uint8_t& freezeTimeout = settingsVar[2];        // 超时冻结 单位 秒
-    uint8_t& wakeupTimeoutIdx = settingsVar[3];     // 定时唤醒 参数索引 0-5：关闭, 5m, 15m, 30m, 1h, 2h
-    uint8_t& terminateTimeout = settingsVar[4];     // 超时杀死 单位 秒
-    uint8_t& setMode = settingsVar[5];              // Freezer模式
-    uint8_t& refreezeTimeoutIdx = settingsVar[6];   // 定时压制 参数索引 0-3：关闭, 30m, 1h, 2h
+    uint8_t& settingsVer = settingsVar[0];                // 设置文件版本
+    uint8_t& freezeTimeout = settingsVar[2];              // 超时冻结 单位 秒
+    uint8_t& wakeupTimeoutIdx = settingsVar[3];           // 定时唤醒 参数索引 0-5：关闭, 5m, 15m, 30m, 1h, 2h
+    uint8_t& terminateTimeout = settingsVar[4];           // 超时杀死 单位 秒
+    uint8_t& setMode = settingsVar[5];                    // Freezer模式
+    uint8_t& refreezeTimeoutIdx = settingsVar[6];         // 定时压制 参数索引 0-3：关闭, 30m, 1h, 2h
 
-    uint8_t& enableBatteryMonitor = settingsVar[13];   // 电池监控
-    uint8_t& enableCurrentFix = settingsVar[14];       // 电池电流校准
-    uint8_t& enableDoubleCell = settingsVar[15];       // 双电芯 电流翻倍
-    uint8_t& enableLMK = settingsVar[16];              // 调整 lmk 参数 仅安卓11-15
-    uint8_t& enableDoze = settingsVar[17];             // 深度Doze
-    //uint8_t& unknown = settingsVar[18];                // 
+    uint8_t& enableBatteryMonitor = settingsVar[13];      // 电池监控
+    uint8_t& enableCurrentFix = settingsVar[14];          // 电池电流校准
+    uint8_t& enableDoubleCell = settingsVar[15];          // 双电芯 电流翻倍
+    uint8_t& enableBootFreeze = settingsVar[16];          // 开机冻结
+    uint8_t& enableBinderFreezer = settingsVar[17];       // Binder Freezer
+    //uint8_t& enableMemoryReclaim = settingsVar[18];           // 内存回收
+    //uint8_t& enableClearBettryWhllelist = settingsVar[19];    // 清理电池白名单
 
-    uint8_t& enableDebug = settingsVar[30];        // 调试日志
+    uint8_t& enableunFreezerTemporary = settingsVar[20];  // 临时解冻
+    uint8_t& enableBreakNetWork = settingsVar[21];        // 全局断网
+    uint8_t& enableLMK = settingsVar[22];                 // 后台优化
+    uint8_t& enableDoze = settingsVar[23];                // 深度Doze       
+    uint8_t& enableDebug = settingsVar[30];               // 调试日志
 
     Settings& operator=(Settings&&) = delete;
 
@@ -105,7 +109,7 @@ public:
                 memcpy(settingsVar, tmp, SETTINGS_SIZE);
 
                 bool isError = false;
-                if (setMode > 2) {
+                if (setMode > 3) {
                     isError = true;
                     setMode = 0;
                     freezeit.logFmt("冻结模式参数[%d]错误, 已重设为 FreezerV2 (FROZEN)", (int)setMode);
@@ -154,7 +158,7 @@ public:
         return (const char*)settingsVar;
     }
 
-    size_t size() {
+    size_t size() const {
         return SETTINGS_SIZE;
     }
 
@@ -208,8 +212,8 @@ public:
         }
               break;
 
-        case 5: { // setMode 0-1-2
-            if (val > 2)
+        case 5: { // setMode 0-1-2-3
+            if (val > 3)
                 return snprintf(replyBuf, REPLY_BUF_SIZE, "冻结模式参数错误, 欲设为:%d", val);
         }
               break;
@@ -226,14 +230,14 @@ public:
         case 13: // 电池监控
         case 14: // 电流校准
         case 15: // 双电芯
-        case 16: // lmk
-        case 17: // doze
-        case 18: // xxx
-        case 19: //
-        case 20: //
-        case 21: //
-        case 22: //
-        case 23: //
+        case 16: // 开机冻结
+        case 17: // Binder冻结
+        case 18: // 内存回收
+        case 19: // 清理电池白名单
+        case 20: // 临时解冻
+        case 21: // 全局断网
+        case 22: // 后台优化
+        case 23: // doze
         case 24: //
         case 25: //
         case 26: //
