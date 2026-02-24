@@ -355,7 +355,7 @@ namespace Utils {
     }
 
     string bin2Hex(const void* bytes, const int len) {
-        auto charList = "0123456789ABCDEF";
+        constexpr const char* charList = "0123456789ABCDEF";
         if (len == 0) return "";
         string res(len * 3, ' ');
         for (int i = 0; i < len; i++) {
@@ -509,8 +509,8 @@ namespace Utils {
         // https://blog.csdn.net/howellzhu/article/details/111597734
         // https://blog.csdn.net/shanzhizi/article/details/16882087 一种是路径方式 一种是抽象命名空间
         constexpr int addrLen =
-            offsetof(sockaddr_un, sun_path) + 21; // addrLen大小是 "\0FreezeitXposedServer" 的字符长度
-        constexpr sockaddr_un srv_addr{ AF_UNIX, "\0FreezeitXposedServer" }; // 首位为空[0]=0，位于Linux抽象命名空间
+            offsetof(sockaddr_un, sun_path) + sizeof("FrozenXposedServer"); // addrLen大小是 "\0FrozenXposedServer" 的字符长度
+        constexpr sockaddr_un srv_addr{ AF_UNIX, "\0FrozenXposedServer" }; // 首位为空[0]=0，位于Linux抽象命名空间
 
         auto fd = socket(AF_UNIX, SOCK_STREAM, 0);
         if (fd < 0)
@@ -570,12 +570,8 @@ namespace Utils {
 
 
     void Init() {
-        srand(std::chrono::system_clock::now().time_since_epoch().count());
-        usleep(1000 * (rand() & 0x7ff)); //随机休眠 1ms ~ 2s
-
-        // 检查是否还有其他freezeit进程，防止进程多开
         char buf[256] = { 0 };
-        if (popenRead("pidof freezeit", buf, sizeof(buf)) == 0) {
+        if (popenRead("pidof Frozen", buf, sizeof(buf)) == 0) {
             printException(nullptr, 0, "进程检测失败");
             exit(-1);
         }
@@ -694,17 +690,17 @@ namespace MAGISK {
 
 // https://github.com/tiann/KernelSU/blob/main/manager/app/src/main/cpp/ksu.cc
 namespace KSU {
-    const int CMD_GRANT_ROOT = 0;
-    const int CMD_BECOME_MANAGER = 1;
-    const int CMD_GET_VERSION = 2;
-    const int CMD_ALLOW_SU = 3;
-    const int CMD_DENY_SU = 4;
-    const int CMD_GET_ALLOW_LIST = 5;
-    const int CMD_GET_DENY_LIST = 6;
-    const int CMD_CHECK_SAFEMODE = 9;
+    constexpr int CMD_GRANT_ROOT = 0;
+    constexpr int CMD_BECOME_MANAGER = 1;
+    constexpr int CMD_GET_VERSION = 2;
+    constexpr int CMD_ALLOW_SU = 3;
+    constexpr int CMD_DENY_SU = 4;
+    constexpr int CMD_GET_ALLOW_LIST = 5;
+    constexpr int CMD_GET_DENY_LIST = 6;
+    constexpr int CMD_CHECK_SAFEMODE = 9;
 
     bool ksuctl(int cmd, void* arg1, void* arg2) {
-        const uint32_t KERNEL_SU_OPTION{ 0xDEADBEEF };
+        constexpr uint32_t KERNEL_SU_OPTION{ 0xDEADBEEF };
         uint32_t result = 0;
         prctl(KERNEL_SU_OPTION, cmd, arg1, arg2, &result);
         return result == KERNEL_SU_OPTION;

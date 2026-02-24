@@ -18,8 +18,8 @@ private:
 
     thread serverThread;
 
-    static const int RECV_BUF_SIZE = 2 * 1024 * 1024;  // 2 MiB TCP通信接收缓存大小
-    static const int REPLY_BUF_SIZE = 8 * 1024 * 1024; // 8 MiB TCP通信回应缓存大小
+    static constexpr int RECV_BUF_SIZE = 2 * 1024 * 1024;  // 2 MiB TCP通信接收缓存大小
+    static constexpr int REPLY_BUF_SIZE = 8 * 1024 * 1024; // 8 MiB TCP通信回应缓存大小
     unique_ptr<char[]> recvBuf, replyBuf;
 
 public:

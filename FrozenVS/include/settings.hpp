@@ -10,7 +10,7 @@ private:
 
     string settingsPath;
 
-    const static size_t SETTINGS_SIZE = 256;
+    constexpr static size_t SETTINGS_SIZE = 256;
     uint8_t settingsVar[SETTINGS_SIZE] = {
             8,  //[0] 设置文件版本
             0,  //[1] 
@@ -187,7 +187,7 @@ public:
     }
 
     int checkAndSet(const int idx, const int val, char* replyBuf) {
-        const size_t REPLY_BUF_SIZE = 2048;
+        constexpr size_t REPLY_BUF_SIZE = 2048;
 
         switch (idx) {
         case 2: { // freezeTimeout sec

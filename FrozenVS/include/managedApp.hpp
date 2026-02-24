@@ -14,14 +14,14 @@ private:
     Freezeit& freezeit;
     Settings& settings;
 
-    static const size_t PACKAGE_LIST_BUF_SIZE = 256 * 1024;
+    static constexpr size_t PACKAGE_LIST_BUF_SIZE = 256 * 1024;
     unique_ptr<char[]> packageListBuff;
 
     string homePackage;
     map<string, int> uidIndex;
     map<int, cfgStruct> cfgTemp;
 
-    const unordered_set<string> whiteListForce{
+    const unordered_set<string_view> whiteListForce{
             "com.xiaomi.mibrain.speech",            // 系统语音引擎
             "com.xiaomi.scanner",                   // 小爱视觉
             "com.xiaomi.xmsf",                      // Push
@@ -412,7 +412,7 @@ private:
 
     };
 
-    const unordered_set<string> whiteListDefault{
+    const unordered_set<string_view> whiteListDefault{
         "com.mi.health",                        // 小米运动健康
         "com.tencent.mm.wxa.sce",               // 微信小程序   三星OneUI专用
 
@@ -707,7 +707,7 @@ public:
     }
 
     bool isSystemApp(const char* ptr) {
-        const char* prefix[] = {
+        static constexpr const char* prefix[] = {
                 "com.miui.",
                 "com.oplus.",
                 "com.coloros.",
@@ -716,18 +716,6 @@ public:
                 "com.samsung.systemui.",
                 "com.android.samsung.",
                 "com.sec.android.",
-        };
-        for (size_t i = 0; i < sizeof(prefix) / sizeof(prefix[0]); i++) {
-            if (Utils::startWith(prefix[i], ptr))
-                return true;
-        }
-        return false;
-    }
-
-    bool isTrustedApp(const char* ptr) {
-        const char* prefix[] = {
-                "com.github.",
-                "io.github.",
         };
         for (size_t i = 0; i < sizeof(prefix) / sizeof(prefix[0]); i++) {
             if (Utils::startWith(prefix[i], ptr))
@@ -755,7 +743,7 @@ public:
         for (auto& appInfo : appInfoMap) {
             if (appInfo.uid < UID_START)continue;
 
-            if (isTrustedApp(appInfo.package.c_str()) || whiteListForce.contains(appInfo.package))
+            if (whiteListForce.contains(appInfo.package))
                 appInfo.freezeMode = FREEZE_MODE::WHITEFORCE;
         }
 

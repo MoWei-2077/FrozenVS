@@ -42,43 +42,41 @@ private:
     uint32_t timelineIdx = 0;
     uint32_t unfrozenTimeline[4096] = {};
 
-    bool isReKernelConnected = false;
-    int binderEventCnt = 0;
-
     int refreezeSecRemain = 60; //开机 一分钟时 就压一次
     int remainTimesToRefreshTopApp = 2; //允许多线程冲突，不需要原子操作
 
-    static const size_t GET_VISIBLE_BUF_SIZE = 256 * 1024;
+    static constexpr size_t GET_VISIBLE_BUF_SIZE = 256 * 1024;
     unique_ptr<char[]> getVisibleAppBuff;
 
     binder_state bs{ -1, nullptr, 128 * 1024ULL };
 
-    const char* cgroupV2FreezerCheckPath = "/sys/fs/cgroup/uid_0/cgroup.freeze";
-    const char* cgroupV2frozenCheckPath = "/sys/fs/cgroup/frozen/cgroup.freeze";       // "1" frozen
-    const char* cgroupV2unfrozenCheckPath = "/sys/fs/cgroup/unfrozen/cgroup.freeze";   // "0" unfrozen
+    static constexpr const char* cgroupV2FreezerCheckPath = "/sys/fs/cgroup/uid_0/cgroup.freeze";
+    static constexpr const char* cgroupV2frozenCheckPath = "/sys/fs/cgroup/frozen/cgroup.freeze";       // "1" frozen
+    static constexpr const char* cgroupV2unfrozenCheckPath = "/sys/fs/cgroup/unfrozen/cgroup.freeze";   // "0" unfrozen
 
-    const char* cpusetEventPath = "/dev/cpuset/top-app";
+    static constexpr const char* cpusetEventPath = "/dev/cpuset/top-app";
     //const char* cpusetEventPathA12 = "/dev/cpuset/top-app/tasks";
     //const char* cpusetEventPathA13 = "/dev/cpuset/top-app/cgroup.procs";
 
-    const char* cgroupV1FrozenPath = "/dev/jark_freezer/frozen/cgroup.procs";
-    const char* cgroupV1UnfrozenPath = "/dev/jark_freezer/unfrozen/cgroup.procs";
+    static constexpr const char* cgroupV1FrozenPath = "/dev/jark_freezer/frozen/cgroup.procs";
+    static constexpr const char* cgroupV1UnfrozenPath = "/dev/jark_freezer/unfrozen/cgroup.procs";
 
     // 如果直接使用 uid_xxx/cgroup.freeze 可能导致无法解冻
-    const char* cgroupV2UidPidPath = "/sys/fs/cgroup/uid_%d/pid_%d/cgroup.freeze"; // "1"frozen   "0"unfrozen
-    const char* cgroupV2FrozenPath = "/sys/fs/cgroup/frozen/cgroup.procs";         // write pid
-    const char* cgroupV2UnfrozenPath = "/sys/fs/cgroup/unfrozen/cgroup.procs";     // write pid
+    static constexpr const char* cgroupV2UidPidPath = "/sys/fs/cgroup/uid_%d/pid_%d/cgroup.freeze"; // "1"frozen   "0"unfrozen
+    static constexpr const char* cgroupV2FrozenPath = "/sys/fs/cgroup/frozen/cgroup.procs";         // write pid
+    static constexpr const char* cgroupV2UnfrozenPath = "/sys/fs/cgroup/unfrozen/cgroup.procs";     // write pid
 
+    static constexpr const char* binderPath = "/dev/binder";
 
-    const char v2wchan[16] = "do_freezer_trap";      // FreezerV2冻结状态
-    const char v1wchan[16] = "__refrigerator";       // FreezerV1冻结状态
-    const char SIGSTOPwchan[16] = "do_signal_stop";  // SIGSTOP冻结状态
-    const char v2xwchan[16] = "get_signal";          // FreezerV2冻结状态 内联状态
-    const char pStopwchan[16] = "ptrace_stop";       // ptrace冻结状态
-    const char epoll_wait1_wchan[16] = "SyS_epoll_wait";
-    const char epoll_wait2_wchan[16] = "do_epoll_wait";
-    const char binder_wchan[32] = "binder_ioctl_write_read";
-    const char pipe_wchan[16] = "pipe_wait";
+    static constexpr char v2wchan[] = "do_freezer_trap";      // FreezerV2冻结状态
+    static constexpr char v1wchan[] = "__refrigerator";       // FreezerV1冻结状态
+    static constexpr char SIGSTOPwchan[] = "do_signal_stop";  // SIGSTOP冻结状态
+    static constexpr char v2xwchan[] = "get_signal";          // FreezerV2冻结状态 内联状态
+    static constexpr char pStopwchan[] = "ptrace_stop";       // ptrace冻结状态
+    static constexpr char epoll_wait1_wchan[] = "SyS_epoll_wait";
+    static constexpr char epoll_wait2_wchan[] = "do_epoll_wait";
+    static constexpr char binder_wchan[] = "binder_ioctl_write_read";
+    static constexpr char pipe_wchan[] = "pipe_wait";
 
 public:
     Freezer& operator=(Freezer&&) = delete;
@@ -90,7 +88,7 @@ public:
 
         getVisibleAppBuff = make_unique<char[]>(GET_VISIBLE_BUF_SIZE);
 
-        binderInit("/dev/binder");
+        binderInit(binderPath);
 
         threads.emplace_back(thread(&Freezer::cpuSetTriggerTask, this)); //监控前台
         threads.emplace_back(thread(&Freezer::binderEventTriggerTask, this)); //binder事件
@@ -739,7 +737,7 @@ public:
             }
 
             stateStr.appendFmt("%5d %4d ", pid, memMiB);
-            if (!strcmp(readBuff, v2wchan)) {
+            if (!strcmp(readBuff, v2wchan) || !strcmp(readBuff, v2xwchan)) {
                 stateStr.appendFmt("❄️V2冻结中 %s\n", label.c_str());
             }
             else if (!strcmp(readBuff, v1wchan)) {
@@ -747,10 +745,6 @@ public:
             }
             else if (!strcmp(readBuff, SIGSTOPwchan)) {
                 stateStr.appendFmt("🧊ST冻结中 %s\n", label.c_str());
-            }
-            else if (!strcmp(readBuff, v2xwchan)) {
-                stateStr.appendFmt("❄️V2*冻结中 %s\n", label.c_str());
-                //getSignalCnt++;
             }
             else if (!strcmp(readBuff, pStopwchan)) {
                 stateStr.appendFmt("🧊ST冻结中(ptrace_stop) %s\n", label.c_str());
@@ -791,9 +785,6 @@ public:
 
             freezeit.log(string_view(stateStr.c_str(), stateStr.length));
         }
-
-        if(isReKernelConnected)
-            freezeit.logFmt("Re:Kernel上报次数 %d", binderEventCnt);
 
         stackString<64> tips;
         int tmp = systemTools.runningTime;
@@ -1239,7 +1230,6 @@ public:
                 sleep(60);
                 continue;
             }
-            isReKernelConnected = true;
             while (true) {
                 memset(&u_info, 0, sizeof(u_info));
                 len = sizeof(struct sockaddr_nl);
@@ -1259,8 +1249,6 @@ public:
                         freezeit.logFmt("Binder解冻 %s", managedApp[uid].label.c_str());
                     }
                 }
-
-                binderEventCnt++;
             }
 
             close(skfd);
@@ -1342,7 +1330,7 @@ public:
             const int pid = atoi(file->d_name);
             if (pid <= 100) continue;
 
-            const size_t len = Faststrlen(file->d_name);
+            const size_t len = strlen(file->d_name);
             char fullPath[64] = "/proc/";
             memcpy(fullPath + 6, file->d_name, len);
 

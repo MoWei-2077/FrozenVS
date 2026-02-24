@@ -28,7 +28,7 @@ private:
 public:
     // 各核心 曲线颜色 ABGR
     //const uint32_t* COLOR_CPU = COLOR_CLUSTER[0];
-    const uint32_t COLOR_CPU[16] = {
+    static constexpr uint32_t COLOR_CPU[16] = {
 
         //#22B8DD, #22DDB8, #22DD6D, #92DD22,  #E6E61A,#E6BD1A, #E66B1A, ##E61A1A
 
@@ -127,8 +127,8 @@ public:
     }
 
     uint32_t getExtMemorySize() {
-        const char* filePathMIUI = "/data/extm/extm_file";
-        const char* filePathCOS = "/data/nandswap/swapfile";
+        constexpr const char* filePathMIUI = "/data/extm/extm_file";
+        constexpr const char* filePathCOS = "/data/nandswap/swapfile";
 
         struct stat statBuf { };
         if (!access(filePathMIUI, F_OK)) {
@@ -719,8 +719,8 @@ public:
 
     // https://blog.csdn.net/meccaendless/article/details/80238997
     void sndThreadFunc() {
-        const int SND_BUF_SIZE = 8192;
-        const char* sndPath = "/dev/snd";
+        constexpr int SND_BUF_SIZE = 8192;
+        constexpr const char* sndPath = "/dev/snd";
 
         // const char *event_str[EVENT_NUM] =
         // {
