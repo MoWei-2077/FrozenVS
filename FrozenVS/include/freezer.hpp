@@ -36,6 +36,8 @@ private:
     set<int> curForegroundApp;           //新前台应用
     set<int> curFgBackup;                //新前台应用备份 用于进入doze前备份， 退出后恢复
     set<int> naughtyApp;                 //冻结期间存在异常解冻或唤醒进程的应用
+    unordered_set<int> lastAudioApp;     //上次播放音频的应用  
+    unordered_set<int> currentAudioApp;  //正在播放音频的应用  
     mutex naughtyMutex;
 
     uint32_t timelineIdx = 0;
@@ -88,10 +90,11 @@ public:
 
         binderInit(binderPath);
 
-
         threads.emplace_back(thread(&Freezer::cpuSetTriggerTask, this)); //监控前台
         threads.emplace_back(thread(&Freezer::bootFreeze, this)); //开机冻结
         threads.emplace_back(thread(&Freezer::binderEventTriggerTask, this)); //binder事件
+        threads.emplace_back(thread(&Freezer::getAudioByLocalSocket, this));  // 监听音频播放 
+        threads.emplace_back(thread(&Freezer::handlePendingIntent, this));    // 后台意图
         threads.emplace_back(thread(&Freezer::cycleThreadFunc, this));
 
         checkAndMountV2();
@@ -208,6 +211,12 @@ public:
     void unFreezerTemporary(int uid) {
         curForegroundApp.insert(uid);
         updateAppProcess();
+    }
+
+    void unFreezerTemporary(int uid, int second) {
+        curForegroundApp.insert(uid);
+        updateAppProcess();
+        pendingHandleList[uid] = second;
     }
 
     map<int, vector<int>> getRunningPids(set<int>& uidSet) {
@@ -435,7 +444,9 @@ public:
                 appInfo.timelineUnfrozenIdx = -1;
             }
         }
-
+        
+        appInfo.isFreeze = freeze; 
+        
         if (freeze && (appInfo.needBreakNetwork() || settings.enableBreakNetWork)) 
             breakNetWork(appInfo);
 
@@ -662,7 +673,12 @@ public:
             const int memMiB = ptr ? (atoi(ptr + 1) >> 8) : 0;
             totalMiB += memMiB;
 
-            if (curForegroundApp.contains(uid)) {
+            if (appInfo.isAudioPlaying && !appInfo.isFreeze) {
+                stateStr.appendFmt("%5d %4d 🎵正在播放 %s\n", pid, memMiB, label.c_str());
+                continue;
+            }
+
+            if (curForegroundApp.contains(uid) && !appInfo.isFreeze) {
                 stateStr.appendFmt("%5d %4d 📱正在前台 %s\n", pid, memMiB, label.c_str());
                 continue;
             }
@@ -1013,6 +1029,102 @@ public:
         END_TIME_COUNT;
     }
 
+    void getAudioByLocalSocket() {
+        constexpr int waitSeconds = 6;
+        sleep(5); 
+
+        while (true) {
+            if (!systemTools.isAudioPlaying) { sleep(1); continue; }
+            int buff[24] = {};  
+
+            int recvLen = Utils::localSocketRequest(XPOSED_CMD::GET_AUDIO, nullptr, 0, buff, 
+                sizeof(buff));
+
+            if (recvLen <= 0) {
+                freezeit.logFmt("%s() 工作异常, 请确认LSPosed中Frozen是否已经勾选系统框架", __FUNCTION__);
+                return;
+            }
+            else if (recvLen < 4) {
+                freezeit.logFmt("%s() 返回数据异常 recvLen[%d]", __FUNCTION__, recvLen);
+                if (recvLen > 0 && recvLen < 64 * 4)
+                    freezeit.logFmt("DumpHex: %s", Utils::bin2Hex(buff, recvLen).c_str());
+                return;
+            }
+
+            const int uidCount = (recvLen / 4) - 1; 
+
+            currentAudioApp.clear();
+
+            for (int i = 0; i < uidCount; ++i) {
+                int uid = buff[i];
+
+                if (!managedApp.contains(uid))
+                    continue;
+                
+                auto& appInfo = managedApp[uid];
+                if (appInfo.isWhitelist()) 
+                    continue;
+                
+                if (appInfo.isPermissive && !lastAudioApp.contains(uid) && !appInfo.isAudioPlaying) {
+                    if (appInfo.package == "com.ss.android.ugc.aweme" 
+                        || appInfo.package == "tv.danmaku.bili"
+                        || appInfo.package == "com.ss.android.ugc.aweme.lite") continue;
+                    appInfo.isAudioPlaying = true;
+                    currentAudioApp.insert(uid);
+                }
+            }
+
+            for (const int lastUid : lastAudioApp) {
+                if (!currentAudioApp.contains(lastUid)) {
+                    managedApp[lastUid].isAudioPlaying = false;
+                    pendingHandleList[lastUid] = waitSeconds;
+                }
+            }
+
+            lastAudioApp = std::move(currentAudioApp);
+            
+            Utils::sleep_ms(1000); 
+        }
+    }
+
+    void handlePendingIntent() {
+        sleep(3); 
+
+        while (true) {
+            if (doze.isScreenOffStandby) { sleep(5); continue;}
+            int buff[24] = {0};
+
+            const int recvLen = Utils::localSocketRequest(XPOSED_CMD::GET_INTENT, nullptr, 0, buff, 
+                sizeof(buff));
+            
+            if (recvLen <= 0) {
+                freezeit.logFmt("%s() 工作异常, 请确认LSPosed中Frozen是否已经勾选系统框架", __FUNCTION__);
+                return;
+            }
+            else if (recvLen < 4) {
+                freezeit.logFmt("%s() 返回数据异常 recvLen[%d]", __FUNCTION__, recvLen);
+                if (recvLen > 0 && recvLen < 64 * 4)
+                    freezeit.logFmt("DumpHex: %s", Utils::bin2Hex(buff, recvLen).c_str());
+                return;
+            }
+
+            const int uidCount = (recvLen / 4) - 1; 
+
+            for (int i = 0; i < uidCount; i++) {
+                const int uid = buff[i];
+
+                if (!managedApp.contains(uid))
+                    return;
+
+                auto& appInfo = managedApp[uid];
+                if (appInfo.isFreeze && !pendingHandleList.contains(uid)) {
+                    freezeit.logFmt("后台意图:[%s],将进行临时解冻", appInfo.label.c_str());
+                    unFreezerTemporary(uid, 3);
+                }
+            }
+            Utils::sleep_ms(1500);
+        }
+    }
 
     string getModeText(FREEZE_MODE mode) {
         switch (mode) {
@@ -1033,41 +1145,6 @@ public:
         default:
             return "未知";
         }
-    }
-
-    void eventTouchTriggerTask(int n) {
-        constexpr int TRIGGER_BUF_SIZE = 8192;
-
-        char touchEventPath[64];
-        snprintf(touchEventPath, sizeof(touchEventPath), "/dev/input/event%d", n);
-
-        usleep(n * 1000 * 10);
-
-        int inotifyFd = inotify_init();
-        if (inotifyFd < 0) {
-            fprintf(stderr, "同步事件: 0xA%d (1/3)失败: [%d]:[%s]", n, errno, strerror(errno));
-            exit(-1);
-        }
-
-        int watch_d = inotify_add_watch(inotifyFd, touchEventPath, IN_ALL_EVENTS);
-        if (watch_d < 0) {
-            fprintf(stderr, "同步事件: 0xA%d (2/3)失败: [%d]:[%s]", n, errno, strerror(errno));
-            exit(-1);
-        }
-
-        freezeit.logFmt("初始化同步事件: 0xA%d", n);
-
-        constexpr int REMAIN_TIMES_MAX = 2;
-        char buf[TRIGGER_BUF_SIZE];
-        while (read(inotifyFd, buf, TRIGGER_BUF_SIZE) > 0) {
-            remainTimesToRefreshTopApp = REMAIN_TIMES_MAX;
-            usleep(500 * 1000);
-        }
-
-        inotify_rm_watch(inotifyFd, watch_d);
-        close(inotifyFd);
-
-        freezeit.logFmt("已退出监控同步事件: 0xA%d", n);
     }
 
     void cpuSetTriggerTask() {

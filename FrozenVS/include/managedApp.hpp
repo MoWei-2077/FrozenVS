@@ -5,7 +5,6 @@
 #include "settings.hpp"
 #include "vpopen.hpp"
 
-
 class ManagedApp {
 private:
     string cfgPath;
@@ -424,7 +423,7 @@ private:
 
 public:
 
-    const set<FREEZE_MODE> FREEZE_MODE_SET{
+    const unordered_set<FREEZE_MODE> FREEZE_MODE_SET{
             FREEZE_MODE::TERMINATE,
             FREEZE_MODE::SIGNAL,
             FREEZE_MODE::SIGNAL_BREAK,
@@ -613,6 +612,8 @@ public:
                 .uid = uid,
                 .freezeMode = isSYS ? FREEZE_MODE::WHITELIST : FREEZE_MODE::FREEZER,
                 .isPermissive = true,
+                .isFreeze = false,
+                .isAudioPlaying = false,
                 .delayCnt = 0,
                 .timelineUnfrozenIdx = -1,
                 .isSystemApp = isSYS,

@@ -134,6 +134,8 @@ enum class XPOSED_CMD : uint32_t {
     BREAK_NETWORK = baseCode + 41,
 
     UPDATE_PENDING = baseCode + 60,   // 更新待冻结应用
+    GET_AUDIO = baseCode + 81, // 获取音频信息
+    GET_INTENT = baseCode + 91, // 获取后台意图
 };
 
 enum class REPLY : uint32_t {
@@ -201,6 +203,8 @@ struct appInfoStruct {
     int uid = -1;
     FREEZE_MODE freezeMode = FREEZE_MODE::FREEZER; // [10]:杀死 [20]:SIGSTOP [30]:freezer [40]:配置 [50]:内置
     bool isPermissive = true;      // 宽容的 有前台服务也算前台
+    bool isFreeze = false;         // 被冻结的应用
+    bool isAudioPlaying = false;   // 正在播放音频的应用
     int delayCnt = 0;              // Binder冻结失败而延迟次数
     int timelineUnfrozenIdx = -1;  // 解冻时间线索引
     bool isSystemApp = true;       // 是否系统应用
@@ -419,6 +423,10 @@ namespace Utils {
         char buff[64 * 1024];
         readString(path, buff, sizeof(buff));
         return string(buff);
+    }
+
+    void sleep_ms(const int second) {
+        usleep(second * 1000);
     }
 
     bool writeInt(const char* path, const int value) {
