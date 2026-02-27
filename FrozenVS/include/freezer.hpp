@@ -9,7 +9,6 @@
 
 
 #define PACKET_SIZE      128
-#define NETLINK_TEST     22  // 需要读取 /proc/rekernel/
 #define USER_PORT        100
 #define MAX_PLOAD        125
 #define MSG_LEN          125
@@ -446,7 +445,7 @@ public:
         }
         
         appInfo.isFreeze = freeze; 
-        
+
         if (freeze && (appInfo.needBreakNetwork() || settings.enableBreakNetWork)) 
             breakNetWork(appInfo);
 
@@ -573,6 +572,11 @@ public:
     bool checkFreezerV2UID() {
         return (!access(cgroupV2FreezerCheckPath, F_OK));
     }
+
+    bool checkReKernel() const  {
+        return (!access("/proc/rekernel/", F_OK));
+    }
+
 
     bool checkFreezerV2FROZEN() {
         return (!access(cgroupV2frozenCheckPath, F_OK) && !access(cgroupV2unfrozenCheckPath, F_OK));
@@ -1183,6 +1187,33 @@ public:
         freezeit.log("已退出监控同步事件: 0xB0");
     }
 
+    int getReKernelPort() {
+        auto dir = opendir("/proc/rekernel"); 
+        if (!dir) return -1;
+
+        int port = -1;
+        struct dirent *file;
+        while ((file = readdir(dir))) {
+            if (file->d_name[0] == '.') continue;  
+
+            if (file->d_name[1] == '2') {
+                closedir(dir);
+                return 22; 
+            } else if (file->d_name[1] == '6') {
+                closedir(dir);
+                return 26;  
+            }
+            
+            if (file->d_name[1] >= '3' && file->d_name[1] <= '5') {
+                port = 20 + (file->d_name[1] - '0');
+            }
+        }
+
+        closedir(dir);
+        return port;  
+    }
+
+
     // Binder事件 需要额外magisk模块: ReKernel
     void binderEventTriggerTask() {
         if (!settings.enableunFreezerTemporary) return;
@@ -1192,10 +1223,14 @@ public:
         struct sockaddr_nl saddr {}, daddr{};
         constexpr const char umsg[] = "Hello! Re:Kernel!";
 
-        if (access("/proc/rekernel/22", F_OK)) {
-            freezeit.log("ReKernel未安装: /proc/rekernel/22");
+        if (!checkReKernel()) {
+            freezeit.log("ReKernel未安装");
             return;
         }
+
+        const int NETLINK_TEST = getReKernelPort();
+
+        freezeit.logFmt("已连接至ReKernel: %d#100", NETLINK_TEST);
 
         struct nlmsghdr* nlh = (struct nlmsghdr*)malloc(NLMSG_SPACE(MAX_PLOAD));
 
@@ -1242,6 +1277,7 @@ public:
                 sleep(60);
                 continue;
             }
+
             while (true) {
                 memset(&u_info, 0, sizeof(u_info));
                 len = sizeof(struct sockaddr_nl);
@@ -1250,23 +1286,29 @@ public:
                     freezeit.log("ReKernel Failed recv msg from kernel!");
                     break;
                 }
-
+                const bool isBinderType = !strncmp(u_info.msg, "type=Binder", 11);
                 auto ptr = strstr(u_info.msg, "target=");
-                if (ptr != nullptr) {
+                const char* ptr1 = strstr(u_info.msg, "oneway=");
+                const int oneway = (ptr1 != nullptr) ? atoi(ptr1 + 7) : 0;
+                const char* ptr2 = strstr(u_info.msg, "bindertype=free_buffer_full");
+
+                if (isBinderType && ptr2 == nullptr && oneway != 1 && ptr != nullptr) {
+
                     const int uid = atoi(ptr + 7);
-                    if (managedApp.contains(uid) && managedApp[uid].isSignalOrFreezer()
-                        && (!curForegroundApp.contains(uid))
-                        && (!pendingHandleList.contains(uid))) {
-                        unFreezerTemporary(uid);
-                        freezeit.logFmt("Binder解冻 %s", managedApp[uid].label.c_str());
+
+                    if (!managedApp.contains(uid)) continue;
+                        
+                    auto& appInfo = managedApp[uid];
+
+                    if (appInfo.isFreeze && !pendingHandleList.contains(uid) && curForegroundApp.contains(uid)) {
+                        unFreezerTemporary(uid, 3);
+                        freezeit.logFmt("[%s] 接收到Re:Kernel的Binder信息, 类别: %s 类型: %s, 将进行临时解冻",
+                            managedApp[uid].label.c_str(), oneway ? "ASYNC" : "SYNC", isBinderType ? "临时解冻" : "网络解冻");  
                     }
                 }
-            }
-
-            close(skfd);
-            sleep(60);
+            }  
         }
-
+        close(skfd);
         free(nlh);
     }
 
