@@ -1172,11 +1172,8 @@ public:
 
         freezeit.log("初始化同步事件: 0xB1");
 
-        constexpr int REMAIN_TIMES_MAX = 2;
         char buf[TRIGGER_BUF_SIZE];
         while (read(inotifyFd, buf, TRIGGER_BUF_SIZE) > 0) {
-            if (remainTimesToRefreshTopApp > 0) {
-                remainTimesToRefreshTopApp--;
                 START_TIME_COUNT;
                 if (doze.isScreenOffStandby) {
                     if (doze.checkIfNeedToExit()) {
@@ -1190,7 +1187,6 @@ public:
                     updateAppProcess(); // ~40us
                 }
                 END_TIME_COUNT;
-            }
         }
 
         inotify_rm_watch(inotifyFd, watch_d);
