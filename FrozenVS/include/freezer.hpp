@@ -42,8 +42,6 @@ private:
     uint32_t timelineIdx = 0;
     uint32_t unfrozenTimeline[4096] = {};
 
-    int remainTimesToRefreshTopApp = 2; //允许多线程冲突，不需要原子操作
-
     static constexpr size_t GET_VISIBLE_BUF_SIZE = 256 * 1024;
     unique_ptr<char[]> getVisibleAppBuff;
 
@@ -1177,8 +1175,22 @@ public:
         constexpr int REMAIN_TIMES_MAX = 2;
         char buf[TRIGGER_BUF_SIZE];
         while (read(inotifyFd, buf, TRIGGER_BUF_SIZE) > 0) {
-            remainTimesToRefreshTopApp = REMAIN_TIMES_MAX;
-            usleep(500 * 1000);
+            if (remainTimesToRefreshTopApp > 0) {
+                remainTimesToRefreshTopApp--;
+                START_TIME_COUNT;
+                if (doze.isScreenOffStandby) {
+                    if (doze.checkIfNeedToExit()) {
+                        curForegroundApp = std::move(curFgBackup); // recovery
+                        updateAppProcess();
+                        //setWakeupLockByLocalSocket(WAKEUP_LOCK::DEFAULT);//TODO xposed端改为一律禁止
+                    }
+                }
+                else {
+                    getVisibleAppByLocalSocket();
+                    updateAppProcess(); // ~40us
+                }
+                END_TIME_COUNT;
+            }
         }
 
         inotify_rm_watch(inotifyFd, watch_d);
@@ -1314,32 +1326,11 @@ public:
 
 
     void cycleThreadFunc() {
-        uint32_t halfSecondCnt{ 0 };
-
         sleep(1);
         getVisibleAppByShell(); // 获取桌面
 
         while (true) {
-            usleep(500 * 1000);
-
-            if (remainTimesToRefreshTopApp > 0) {
-                remainTimesToRefreshTopApp--;
-                START_TIME_COUNT;
-                if (doze.isScreenOffStandby) {
-                    if (doze.checkIfNeedToExit()) {
-                        curForegroundApp = std::move(curFgBackup); // recovery
-                        updateAppProcess();
-                        //setWakeupLockByLocalSocket(WAKEUP_LOCK::DEFAULT);//TODO xposed端改为一律禁止
-                    }
-                }
-                else {
-                    getVisibleAppByLocalSocket();
-                    updateAppProcess(); // ~40us
-                }
-                END_TIME_COUNT;
-            }
-
-            if (++halfSecondCnt & 1) continue;
+            usleep(1000 * 1000);
 
             systemTools.cycleCnt++;
             systemTools.runningTime++;
