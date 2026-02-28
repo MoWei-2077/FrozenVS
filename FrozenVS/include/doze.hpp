@@ -40,7 +40,7 @@ private:
             if (line.length() < 10)continue;
             if (line[line.length() - 6] != ',')continue;
 
-            int uid = atoi(line.c_str() + line.length() - 5);
+            const int uid = atoi(line.c_str() + line.length() - 5);
             if (!managedApp.contains(uid))continue;
 
             auto& appInfo = managedApp[uid];

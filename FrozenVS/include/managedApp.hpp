@@ -587,10 +587,16 @@ public:
 
         map<int, string> allAppList, thirdAppList;
 
-        if (!readPackagesListA12(allAppList, thirdAppList)) {
-            readCmdPackagesAll(allAppList);
-            readCmdPackagesThird(thirdAppList);
-        }
+        if (freezeit.SDK_INT_VER >= 31) {
+            if (!readPackagesListA12(allAppList, thirdAppList)) {
+                readCmdPackagesAll(allAppList);
+                readCmdPackagesThird(thirdAppList);
+            }
+        } else {
+			if (!readPackagesListA10_11(allAppList)) {
+				readCmdPackagesAll(allAppList);
+		    readCmdPackagesThird(thirdAppList);   
+		}
 
         if (allAppList.empty()) {
             freezeit.log("没有应用或获取失败");

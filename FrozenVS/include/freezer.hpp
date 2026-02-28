@@ -42,6 +42,8 @@ private:
     uint32_t timelineIdx = 0;
     uint32_t unfrozenTimeline[4096] = {};
 
+    int remainTimesToRefreshTopApp = 2; //允许多线程冲突，不需要原子操作
+
     static constexpr size_t GET_VISIBLE_BUF_SIZE = 256 * 1024;
     unique_ptr<char[]> getVisibleAppBuff;
 
@@ -1090,41 +1092,35 @@ public:
     }
 
     void handlePendingIntent() {
-        sleep(3); 
+        int buff[24] = {0};
 
-        while (true) {
-            if (doze.isScreenOffStandby) { sleep(5); continue;}
-            int buff[24] = {0};
+        const int recvLen = Utils::localSocketRequest(XPOSED_CMD::GET_INTENT, nullptr, 0, buff, 
+            sizeof(buff));
+        
+        if (recvLen <= 0) {
+            freezeit.logFmt("%s() 工作异常, 请确认LSPosed中Frozen是否已经勾选系统框架", __FUNCTION__);
+            return;
+        }
+        else if (recvLen < 4) {
+            freezeit.logFmt("%s() 返回数据异常 recvLen[%d]", __FUNCTION__, recvLen);
+            if (recvLen > 0 && recvLen < 64 * 4)
+                freezeit.logFmt("DumpHex: %s", Utils::bin2Hex(buff, recvLen).c_str());
+            return;
+        }
 
-            const int recvLen = Utils::localSocketRequest(XPOSED_CMD::GET_INTENT, nullptr, 0, buff, 
-                sizeof(buff));
-            
-            if (recvLen <= 0) {
-                freezeit.logFmt("%s() 工作异常, 请确认LSPosed中Frozen是否已经勾选系统框架", __FUNCTION__);
+        const int uidCount = (recvLen / 4) - 1; 
+
+        for (int i = 0; i < uidCount; i++) {
+            const int uid = buff[i];
+
+            if (!managedApp.contains(uid))
                 return;
+
+            auto& appInfo = managedApp[uid];
+            if (appInfo.isFreeze && !pendingHandleList.contains(uid)) {
+                freezeit.logFmt("后台意图:[%s],将进行临时解冻", appInfo.label.c_str());
+                unFreezerTemporary(uid, 3);
             }
-            else if (recvLen < 4) {
-                freezeit.logFmt("%s() 返回数据异常 recvLen[%d]", __FUNCTION__, recvLen);
-                if (recvLen > 0 && recvLen < 64 * 4)
-                    freezeit.logFmt("DumpHex: %s", Utils::bin2Hex(buff, recvLen).c_str());
-                return;
-            }
-
-            const int uidCount = (recvLen / 4) - 1; 
-
-            for (int i = 0; i < uidCount; i++) {
-                const int uid = buff[i];
-
-                if (!managedApp.contains(uid))
-                    return;
-
-                auto& appInfo = managedApp[uid];
-                if (appInfo.isFreeze && !pendingHandleList.contains(uid)) {
-                    freezeit.logFmt("后台意图:[%s],将进行临时解冻", appInfo.label.c_str());
-                    unFreezerTemporary(uid, 3);
-                }
-            }
-            Utils::sleep_ms(1500);
         }
     }
 
@@ -1152,8 +1148,8 @@ public:
     void cpuSetTriggerTask() {
         constexpr int TRIGGER_BUF_SIZE = 8192;
 
-        const int inotifyFd = inotify_init();
-        if (inotifyFd < 0) {
+        const int fd = inotify_init();
+        if (fd < 0) {
             fprintf(stderr, "同步事件: 0xB1 (1/3)失败: [%d]:[%s]", errno, strerror(errno));
             exit(-1);
         }
@@ -1163,34 +1159,25 @@ public:
         //    : cpusetEventPathA12,
         //    IN_ALL_EVENTS);
 
-        const int watch_d = inotify_add_watch(inotifyFd, cpusetEventPath, IN_ALL_EVENTS);
+        const int wd = inotify_add_watch(fd, cpusetEventPath, IN_ALL_EVENTS);
 
-        if (watch_d < 0) {
+        if (wd < 0) {
             fprintf(stderr, "同步事件: 0xB1 (2/3)失败: [%d]:[%s]", errno, strerror(errno));
             exit(-1);
         }
 
         freezeit.log("初始化同步事件: 0xB1");
 
+        constexpr int REMAIN_TIMES_MAX = 2;
         char buf[TRIGGER_BUF_SIZE];
-        while (read(inotifyFd, buf, TRIGGER_BUF_SIZE) > 0) {
-                START_TIME_COUNT;
-                if (doze.isScreenOffStandby) {
-                    if (doze.checkIfNeedToExit()) {
-                        curForegroundApp = std::move(curFgBackup); // recovery
-                        updateAppProcess();
-                        //setWakeupLockByLocalSocket(WAKEUP_LOCK::DEFAULT);//TODO xposed端改为一律禁止
-                    }
-                }
-                else {
-                    getVisibleAppByLocalSocket();
-                    updateAppProcess(); // ~40us
-                }
-                END_TIME_COUNT;
+
+        while (read(fd, buf, TRIGGER_BUF_SIZE) > 0) {
+            remainTimesToRefreshTopApp = REMAIN_TIMES_MAX;
+            Utils::sleep_ms(200);
         }
 
-        inotify_rm_watch(inotifyFd, watch_d);
-        close(inotifyFd);
+        inotify_rm_watch(fd, wd);
+        close(fd);
 
         freezeit.log("已退出监控同步事件: 0xB0");
     }
@@ -1322,12 +1309,30 @@ public:
 
 
     void cycleThreadFunc() {
+        uint32_t halfSecondCnt{ 0 };
+
         sleep(1);
         getVisibleAppByShell(); // 获取桌面
 
         while (true) {
-            usleep(1000 * 1000);
+            Utils::sleep_ms(200);
 
+            if (remainTimesToRefreshTopApp-- > 0) {
+                START_TIME_COUNT;
+                if (doze.isScreenOffStandby && doze.checkIfNeedToExit()) {
+                    curForegroundApp = std::move(curFgBackup); // recovery
+                    updateAppProcess();
+                }
+                else {
+                    getVisibleAppByLocalSocket();
+                    updateAppProcess(); // ~40us
+                }
+                END_TIME_COUNT;
+            }
+
+            if (++halfSecondCnt != 5) continue;
+
+            halfSecondCnt = 0;
             systemTools.cycleCnt++;
             systemTools.runningTime++;
 
@@ -1341,7 +1346,7 @@ public:
             }
 
             if (doze.isScreenOffStandby)continue;// 息屏状态 不用执行 以下功能
-
+            handlePendingIntent();
             systemTools.checkBattery();// 1分钟一次 电池检测
             checkWakeup();// 检查是否有定时解冻
         }
