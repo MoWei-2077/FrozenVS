@@ -43,16 +43,18 @@ private:
     uint32_t unfrozenTimeline[4096] = {};
 
     int remainTimesToRefreshTopApp = 2; //允许多线程冲突，不需要原子操作
+    bool specialPlanV2Uid = false;
 
     static constexpr size_t GET_VISIBLE_BUF_SIZE = 256 * 1024;
     unique_ptr<char[]> getVisibleAppBuff;
 
     binder_state bs{ -1, nullptr, 128 * 1024ULL };
 
+    static constexpr const char* cgroupV2FreezerOppoCheckPath = "/sys/fs/cgroup/system/uid_0/cgroup.freeze"; 
     static constexpr const char* cgroupV2FreezerCheckPath = "/sys/fs/cgroup/uid_0/cgroup.freeze";
     static constexpr const char* cgroupV2frozenCheckPath = "/sys/fs/cgroup/frozen/cgroup.freeze";       // "1" frozen
     static constexpr const char* cgroupV2unfrozenCheckPath = "/sys/fs/cgroup/unfrozen/cgroup.freeze";   // "0" unfrozen
-
+    
     static constexpr const char* cpusetEventPath = "/dev/cpuset/top-app";
     //const char* cpusetEventPathA12 = "/dev/cpuset/top-app/tasks";
     //const char* cpusetEventPathA13 = "/dev/cpuset/top-app/cgroup.procs";
@@ -61,6 +63,7 @@ private:
     static constexpr const char* cgroupV1UnfrozenPath = "/dev/jark_freezer/unfrozen/cgroup.procs";
 
     // 如果直接使用 uid_xxx/cgroup.freeze 可能导致无法解冻
+    static constexpr const char* cgroupV2UidPidOppoPath = "/sys/fs/cgroup/%s/uid_%d/pid_%d/cgroup.freeze";
     static constexpr const char* cgroupV2UidPidPath = "/sys/fs/cgroup/uid_%d/pid_%d/cgroup.freeze"; // "1"frozen   "0"unfrozen
     static constexpr const char* cgroupV2FrozenPath = "/sys/fs/cgroup/frozen/cgroup.procs";         // write pid
     static constexpr const char* cgroupV2UnfrozenPath = "/sys/fs/cgroup/unfrozen/cgroup.procs";     // write pid
@@ -345,7 +348,11 @@ public:
 
         case WORK_MODE::V2UID: {
             for (const int pid : appInfo.pids) {
-                snprintf(path, sizeof(path), cgroupV2UidPidPath, appInfo.uid, pid);
+                if (specialPlanV2Uid) 
+                    snprintf(path, sizeof(path), cgroupV2UidPidOppoPath, appInfo.isSystemApp ? "system" : "apps", appInfo.uid, pid);
+                else 
+                    snprintf(path, sizeof(path), cgroupV2UidPidPath, appInfo.uid, pid);
+
                 if (!Utils::writeString(path, freeze ? "1" : "0", 2))
                     freezeit.logFmt("%s [%s PID:%d] 失败(进程可能已结束或者Freezer控制器尚未初始化PID路径)",
                         freeze ? "冻结" : "解冻", appInfo.label.c_str(), pid);
@@ -570,7 +577,8 @@ public:
     }
 
     bool checkFreezerV2UID() {
-        return (!access(cgroupV2FreezerCheckPath, F_OK));
+        specialPlanV2Uid = !access(cgroupV2FreezerOppoCheckPath, F_OK);
+        return (!access(cgroupV2FreezerCheckPath, F_OK) || specialPlanV2Uid);
     }
 
     bool checkReKernel() const  {
