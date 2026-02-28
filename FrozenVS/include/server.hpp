@@ -191,7 +191,7 @@ public:
                 freezeit.prop["version"].c_str(), freezeit.prop["versionCode"].c_str(),
                 freezeit.prop["author"].c_str(),
                 systemTools.cpuCluster, freezeit.moduleEnv.c_str(), freezer.getCurWorkModeStr(),
-                systemTools.androidVerStr.c_str(), systemTools.kernelVerStr.c_str(), systemTools.extMemorySize);
+                freezeit.androidVerStr.c_str(), systemTools.kernelVerStr.c_str(), systemTools.extMemorySize);
         } break;
 
         case MANAGER_CMD::getLog: {

@@ -85,9 +85,12 @@ public:
     bool isSamsung{ false };
     bool isOppoVivo{ false };
 
+    int ANDROID_VER = 0;
+    int SDK_INT_VER = 0;
 
     string modulePath;
     string moduleEnv{ "Unknown" };
+    string androidVerStr{ "Unknown" };
 
     map<string, string> prop{
             {"id",          "Unknown"},
@@ -173,6 +176,13 @@ public:
         fprintf(stderr, "version %s", prop["version"].c_str()); // 发送当前版本信息给监控进程
 
         char res[256];
+
+        ANDROID_VER = __system_property_get("ro.build.version.release", res) > 0 ? atoi(tmp) : 0;
+        SDK_INT_VER = __system_property_get("ro.build.version.sdk", res) > 0 ? atoi(res) : 0;
+        androidVerStr = to_string(ANDROID_VER) + " (API " + to_string(SDK_INT_VER) + ")";
+
+        logFmt("安卓版本 %s", androidVerStr.c_str());
+
         if (__system_property_get("gsm.operator.alpha", res) > 0 && res[0] != ',')
             logFmt("运营信息 %s", res);
         if (__system_property_get("gsm.network.type", res) > 0) logFmt("网络类型 %s", res);

@@ -593,7 +593,7 @@ public:
                 readCmdPackagesThird(thirdAppList);
             }
         } else {
-			if (!readPackagesListA10_11(allAppList)) {
+			if (!readPackagesListA10_11(allAppList)) 
 				readCmdPackagesAll(allAppList);
 		    readCmdPackagesThird(thirdAppList);   
 		}

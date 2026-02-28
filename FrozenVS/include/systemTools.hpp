@@ -59,23 +59,13 @@ public:
 
     uint32_t extMemorySize = 0; // MiB
 
-    int ANDROID_VER = 0;
-    int SDK_INT_VER = 0;
     KernelVersionStruct kernelVersion;
     string kernelVerStr{ "Unknown" };
-    string androidVerStr{ "Unknown" };
 
     SystemTools& operator=(SystemTools&&) = delete;
 
     SystemTools(Freezeit& freezeit, Settings& settings) :
         freezeit(freezeit), settings(settings) {
-
-        char tmp[1024];
-        ANDROID_VER = __system_property_get("ro.build.version.release", tmp) > 0 ? atoi(tmp) : 0;
-        SDK_INT_VER = __system_property_get("ro.build.version.sdk", tmp) > 0 ? atoi(tmp) : 0;
-        androidVerStr = to_string(ANDROID_VER) + " (API " + to_string(SDK_INT_VER) + ")";
-
-        freezeit.logFmt("安卓版本 %s", androidVerStr.c_str());
 
         utsname kernelInfo{};
         if (!uname(&kernelInfo)) {
