@@ -177,7 +177,7 @@ public:
 
         char res[256];
 
-        ANDROID_VER = __system_property_get("ro.build.version.release", res) > 0 ? atoi(tmp) : 0;
+        ANDROID_VER = __system_property_get("ro.build.version.release", res) > 0 ? atoi(res) : 0;
         SDK_INT_VER = __system_property_get("ro.build.version.sdk", res) > 0 ? atoi(res) : 0;
         androidVerStr = to_string(ANDROID_VER) + " (API " + to_string(SDK_INT_VER) + ")";
 
@@ -209,6 +209,7 @@ public:
     void setDebugPtr(uint8_t* ptr) {
         deBugFlagPtr = ptr;
     }
+    
     bool isDebugOn() {
         if (deBugFlagPtr == nullptr)
             return false;

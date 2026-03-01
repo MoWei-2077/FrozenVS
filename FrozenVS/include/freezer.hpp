@@ -835,6 +835,11 @@ public:
             const int uid = it->first;
             auto& appInfo = managedApp[uid];
 
+            if (curForegroundApp.contains(uid) && appInfo.isAudioPlaying) { // 不该被冻结
+                it++;    
+                continue;
+            }
+
             if (appInfo.isWhitelist()) { // 刚切换成白名单的
                 it = pendingHandleList.erase(it);
                 continue;
