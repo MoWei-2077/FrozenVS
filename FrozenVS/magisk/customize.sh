@@ -1,3 +1,5 @@
+$BOOTMODE || abort "- 🚫 安装失败，仅支持在 Magisk 或 KernelSU 下安装"
+
 chmod a+x "$MODPATH"/Frozen
 chmod a+x "$MODPATH"/service.sh
 
@@ -56,10 +58,9 @@ if [ -e "/data/adb/modules/Hc_tombstone" ]; then
     touch /data/adb/modules/Hc_tombstone/disable
 fi
 
-module_path="/data/adb/modules/Frozen"
-ORG_appcfg="$module_path/appcfg.txt"
-ORG_applabel="$module_path/applabel.txt"
-ORG_settings="$module_path/settings.db"
+ORG_appcfg="/data/adb/modules/Frozen/appcfg.txt"
+ORG_applabel="/data/adb/modules/Frozen/applabel.txt"
+ORG_settings="/data/adb/modules/Frozen/settings.db"
 
 sleep 1
 
@@ -68,6 +69,8 @@ for path in $ORG_appcfg $ORG_applabel $ORG_settings; do
         cp -f $path "$MODPATH"
     fi
 done
+
+echo "- ⚠️⚠️⚠️ 如果您是从6.17以前的版本更新的 请先卸载此模块再刷入 否则将可能导致模块工作异常 -⚠️⚠️⚠️"
 
 output=$(pm list packages io.github.MoWei.Frozen)
 if [ ${#output} -lt 2 ]; then

@@ -49,14 +49,8 @@ private:
             "com.mfashiongallery.emag",             // 小米画报
             "com.huawei.hwid",                      // HMS core服务
 
-            "cn.litiaotiao.app",                    // 李跳跳
-            "com.litiaotiao.app",                   // 李跳跳
-            "hello.litiaotiao.app",                 // 李跳跳
-            "com.zfdang.touchhelper",               // 跳广告
-            "com.giftedcat.adskiphelper",           // 跳广告
             "com.merxury.blocker",                  // Blocker
             "com.wpengapp.lightstart",              // 轻启动
-            "li.songe.gkd",                         // GKD
             "com.sevtinge.hyperceiler",             // HyperCeiler
 
             "com.topjohnwu.magisk",                 // Magisk
@@ -80,6 +74,8 @@ private:
             "com.google.android.apps.nexuslauncher",// pixel 桌面
             "com.oppo.launcher",
 
+            "io.github.MoWei.Frozen",               // Frozen
+            "me.bmax.apatch",                       // APatch
             "me.weishu.kernelsu",                   // KernelSU
             "top.canyie.dreamland.manager",         // Dreamland
             "com.coloros.packageinstaller",         // 安装包管理
@@ -450,9 +446,9 @@ public:
         update2xposedByLocalSocket();
     }
 
-    const static int UID_START = 10000;
-    const static int UID_END = 14000;
-    const static int appMaxNum = UID_END - UID_START;
+    constexpr static int UID_START = 10000;
+    constexpr static int UID_END = 14000;
+    constexpr static int appMaxNum = UID_END - UID_START;
     appInfoStruct appInfoMap[appMaxNum];
 
     auto& operator[](const int uid) { return appInfoMap[uid - UID_START]; }

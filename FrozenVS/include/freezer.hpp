@@ -35,8 +35,8 @@ private:
     set<int> curForegroundApp;           //新前台应用
     set<int> curFgBackup;                //新前台应用备份 用于进入doze前备份， 退出后恢复
     set<int> naughtyApp;                 //冻结期间存在异常解冻或唤醒进程的应用
-    unordered_set<int> lastAudioApp;     //上次播放音频的应用  
-    unordered_set<int> currentAudioApp;  //正在播放音频的应用  
+    vector<int> lastAudioApp;            //上次播放音频的应用  
+    vector<int> currentAudioApp;         //正在播放音频的应用  
     mutex naughtyMutex;
 
     uint32_t timelineIdx = 0;
@@ -535,9 +535,9 @@ public:
             closedir(dir);
         }
 
-        stackString<1024> tmp("定时压制");
+        stackString<1024> tmp("开机冻结");
         for (const auto uid : naughtyApp) {
-            pendingHandleList[uid] = 1;
+            pendingHandleList[uid] = 0; 
             tmp.append(' ').append(managedApp[uid].label.c_str());
         }
         if (naughtyApp.size()) {
@@ -545,7 +545,7 @@ public:
             freezeit.log(string_view(tmp.c_str(), tmp.length));
         }
         else {
-            freezeit.log("定时压制 目前均处于冻结状态");
+            freezeit.log("开机冻结 目前均处于冻结状态");
         }
 
         END_TIME_COUNT;
@@ -1075,24 +1075,30 @@ public:
             for (int i = 0; i < uidCount; ++i) {
                 int uid = buff[i];
 
-                if (!managedApp.contains(uid))
-                    continue;
-                
+                if (!managedApp.contains(uid)) continue;
+                         
                 auto& appInfo = managedApp[uid];
-                if (appInfo.isWhitelist()) 
-                    continue;
+                if (appInfo.isWhitelist()) continue;
                 
-                if (appInfo.isPermissive && !lastAudioApp.contains(uid) && !appInfo.isAudioPlaying) {
+                if (appInfo.isPermissive && !appInfo.isAudioPlaying) {
                     if (appInfo.package == "com.ss.android.ugc.aweme" 
-                        || appInfo.package == "tv.danmaku.bili"
-                        || appInfo.package == "com.ss.android.ugc.aweme.lite") continue;
+                            || appInfo.package == "tv.danmaku.bili" 
+                                || appInfo.package == "com.ss.android.ugc.aweme.lite") continue;
                     appInfo.isAudioPlaying = true;
-                    currentAudioApp.insert(uid);
+                    currentAudioApp.emplace_back(uid);
                 }
             }
 
-            for (const int lastUid : lastAudioApp) {
-                if (!currentAudioApp.contains(lastUid)) {
+            for (int lastUid : lastAudioApp) {
+                bool stillPlaying = false;
+                for (int curUid : currentAudioApp) {
+                    if (curUid == lastUid) {
+                        stillPlaying = true;
+                        break;
+                    }
+                }
+                
+                if (!stillPlaying) {
                     managedApp[lastUid].isAudioPlaying = false;
                     pendingHandleList[lastUid] = waitSeconds;
                 }
