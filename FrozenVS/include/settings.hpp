@@ -36,7 +36,7 @@ private:
             0,  //[21] 全局断网
             0,  //[22] 调整 lmk 参数
             0,  //[23] 深度Doze
-            0,  //[24]
+            0,  //[24] 网络解冻
             0,  //[25]
             0,  //[26]
             0,  //[27]
@@ -79,6 +79,7 @@ public:
     uint8_t& enableBreakNetWork = settingsVar[21];        // 全局断网
     uint8_t& enableLMK = settingsVar[22];                 // 后台优化
     uint8_t& enableDoze = settingsVar[23];                // 深度Doze       
+    uint8_t& enableNetWorkUnFreeze = settingsVar[24];                // 网络解冻 
     uint8_t& enableDebug = settingsVar[30];               // 调试日志
 
     Settings& operator=(Settings&&) = delete;
@@ -238,7 +239,7 @@ public:
         case 21: // 全局断网
         case 22: // 后台优化
         case 23: // doze
-        case 24: //
+        case 24: // 网络解冻
         case 25: //
         case 26: //
         case 27: //

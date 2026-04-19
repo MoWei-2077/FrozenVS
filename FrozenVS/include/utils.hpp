@@ -12,6 +12,7 @@
 #include <mutex>
 #include <limits>
 #include <set>
+#include <unordered_map>
 #include <unordered_set>
 #include <map>
 
@@ -53,8 +54,10 @@
 #include <sys/mount.h>
 #include <sys/system_properties.h>
 #include <algorithm>
+#include <LibUtils.hpp>
 
 using std::set;
+using std::unordered_map;
 using std::unordered_set;
 using std::map;
 using std::multimap;
@@ -71,6 +74,7 @@ using std::mutex;
 using std::make_unique;
 using std::to_string;
 
+using namespace LibUtils;
 
 // 配置编译选项 *****************
 constexpr auto FORK_DOUBLE = 1;
@@ -284,7 +288,7 @@ public:
     }
 
     stackString& append(const char* s) {
-        return append(s, strlen(s));
+        return append(s, Faststrlen(s));
     }
 
     stackString& append(const char c) {
@@ -391,7 +395,7 @@ namespace Utils {
 
         if (len <= 0)return 0;
         buff[15] = 0;
-        return atoi(buff);
+        return Fastatoi(buff);
     }
 
     size_t readString(const char* path, char* buff, const size_t maxLen) {
@@ -441,7 +445,7 @@ namespace Utils {
     }
 
     bool writeString(const char* path, const char* buff, size_t len = 0) {
-        if (len == 0)len = strlen(buff);
+        if (len == 0)len = Faststrlen(buff);
         if (len == 0)return true;
 
         auto fd = open(path, O_WRONLY | O_TRUNC | O_CREAT, 0666);
@@ -533,7 +537,7 @@ namespace Utils {
         size_t bufSize = 0) {
 
         if (bufSize == 0)
-            bufSize = strlen(exceptionBuf);
+            bufSize = Faststrlen(exceptionBuf);
 
         auto fp = fopen("/sdcard/Android/freezeit_crash_log.txt", "ab");
         if (!fp) return;
@@ -668,7 +672,7 @@ namespace MAGISK {
     int get_version_code() {
         char buff[32] = { 0 };
         Utils::popenRead("/system/bin/magisk -V", buff, sizeof(buff));
-        return isdigit(buff[0]) ? atoi(buff) : -1;
+        return isdigit(buff[0]) ? Fastatoi(buff) : -1;
     }
 }
 

@@ -336,7 +336,7 @@ public:
                 }
             }
             if (tips.length())
-                freezeit.logFmt("以下UID的应用不受冻它管理：[%s] 可在冻它配置页搜索UID查看是哪些应用", tips.c_str());
+                freezeit.logFmt("以下UID的应用不受Frozen管理：[%s] 可在冻它配置页搜索UID查看是哪些应用", tips.c_str());
 
             //auto runningPids = freezer.getRunningPids(changeUidSet);
             //tips.clear();
@@ -378,7 +378,7 @@ public:
             map<int, string> labelList;
             for (const string& str : Utils::splitString(string(recvBuf.get(), recvLen),
                 "\n")) {
-                const int uid = atoi(str.c_str());
+                const int uid = Fastatoi(str.c_str());
                 if (!managedApp.contains(uid) || str.length() <= 6)
                     freezeit.logFmt("解析名称错误 [%s]", str.c_str());
                 else labelList[uid] = str.substr(6);

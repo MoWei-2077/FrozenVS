@@ -40,7 +40,6 @@ public:
     int cpuCoreTotal = 0;  // 全部核心数量
     int cpuCoreOnline = 0; // 当前可用核心数量
     uint32_t cycleCnt = 0; // 核心循环计数，约每秒+1
-    uint32_t runningTime = 0; // 约每秒+1
 
     MemInfoStruct memInfo;
 
@@ -389,9 +388,7 @@ public:
 
             lastMinute = nowMinute;
             lastCapacity = nowCapacity;
-
-            if (nowCapacity == 100)
-                runningTime = 0;
+            
         }
         END_TIME_COUNT;
     }

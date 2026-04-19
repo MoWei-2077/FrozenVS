@@ -177,8 +177,8 @@ public:
 
         char res[256];
 
-        ANDROID_VER = __system_property_get("ro.build.version.release", res) > 0 ? atoi(res) : 0;
-        SDK_INT_VER = __system_property_get("ro.build.version.sdk", res) > 0 ? atoi(res) : 0;
+        ANDROID_VER = __system_property_get("ro.build.version.release", res) > 0 ? Fastatoi(res) : 0;
+        SDK_INT_VER = __system_property_get("ro.build.version.sdk", res) > 0 ? Fastatoi(res) : 0;
         androidVerStr = to_string(ANDROID_VER) + " (API " + to_string(SDK_INT_VER) + ")";
 
         logFmt("安卓版本 %s", androidVerStr.c_str());
